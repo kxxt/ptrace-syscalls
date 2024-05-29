@@ -165,6 +165,22 @@ pub fn gen_syscalls(input: TokenStream) -> TokenStream {
         }
       }
     }
+
+    impl #crate_token::FromInspectingRegs for SyscallArgs {
+      fn from_inspecting_regs(pid: #crate_token::Pid, regs: &#crate_token::arch::PtraceRegisters) -> Self {
+        use #crate_token::arch::syscall_no_from_regs;
+        match syscall_no_from_regs!(regs) {
+          #(
+            #syscall_numbers => {
+              SyscallArgs::#arg_struct_names(#crate_token::FromInspectingRegs::from_inspecting_regs(pid, regs))
+            },
+          )*
+          _ => {
+            SyscallArgs::Unknown(#crate_token::FromInspectingRegs::from_inspecting_regs(pid, regs))
+          }
+        }
+      }
+    }
   })
 }
 

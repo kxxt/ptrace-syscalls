@@ -4,13 +4,13 @@ pub type PtraceRegisters = user_regs_struct;
 
 macro_rules! syscall_no_from_regs {
   ($regs:ident) => {
-    $regs.a7 as i64
+    $regs.a7
   };
 }
 
 macro_rules! syscall_res_from_regs {
   ($regs:ident) => {
-    $regs.a0 as i64
+    $regs.a0 as isize
   };
 }
 
