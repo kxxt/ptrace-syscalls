@@ -6,6 +6,7 @@ license = "MIT"
 edition = "2021"
 
 [dependencies]
-nix = { version = "0.29.0", features = ["process"] }
+cfg-if = "1.0.0"
+nix = { version = "0.29.0", features = ["process", "ptrace"] }
 paste = "1.0.15"
 tracer-syscalls-macros = { version = "0.1.0", path = "../tracer-syscalls-macros" }

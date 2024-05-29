@@ -2,10 +2,10 @@ use convert_case::{Case, Casing};
 use paste::paste;
 use proc_macro::TokenStream;
 use proc_macro_crate::{crate_name, FoundCrate};
-use quote::{format_ident, quote};
+use quote::{format_ident, quote, ToTokens};
 use syn::{
-  braced, bracketed, parse::Parse, parse_macro_input, punctuated::Punctuated, token, Field, Ident,
-  Token,
+  braced, bracketed, parse::Parse, parse_macro_input, punctuated::Punctuated, spanned::Spanned,
+  token, Field, Ident, Token,
 };
 
 struct SyscallEntry {
@@ -57,6 +57,31 @@ fn gen_syscall_args_struct(
   let camel_case_ident = Ident::new(&camel_case_name, name.span());
   camel_case_name.push_str("Args");
   let camel_case_args_type = Ident::new(&camel_case_name, name.span());
+  let mut inspects = vec![];
+  let mut arg_names = vec![];
+  for (i, arg) in args.iter().enumerate() {
+    let arg_name = &arg.ident;
+    arg_names.push(arg_name.clone().unwrap());
+    let arg_type = &arg.ty;
+    let literal_i = syn::LitInt::new(&i.to_string(), arg_type.span());
+    // TODO: We shouldn't compare types as strings
+    match arg_type.to_token_stream().to_string().as_str() {
+      // Primitive types
+      "i32" | "i64" | "isize" | "i16" | "RawFd" => {
+        let inspect = quote! {
+          let #arg_name = syscall_arg!(regs, #literal_i) as #arg_type;
+        };
+        inspects.push(inspect);
+      }
+      // Types that need memory inspection
+      _ => {
+        let inspect = quote! {
+          let #arg_name = #crate_token::InspectFromPid::inspect_from(pid, syscall_arg!(regs, #literal_i) as #crate_token::AddressType);
+        };
+        inspects.push(inspect);
+      }
+    }
+  }
   GenSyscallArgsStructResult {
     args_struct: quote::quote! {
       #[cfg(any(#(target_arch = #archs),*))]
@@ -75,6 +100,16 @@ fn gen_syscall_args_struct(
       impl From<#camel_case_args_type> for #crate_token::SyscallArgs {
         fn from(args: #camel_case_args_type) -> Self {
           #crate_token::SyscallArgs::#camel_case_ident(args)
+        }
+      }
+
+      impl #crate_token::FromInspectingRegs for #camel_case_args_type {
+        fn from_inspecting_regs(pid: #crate_token::Pid, regs: &#crate_token::arch::PtraceRegisters) -> Self {
+          use #crate_token::arch::syscall_arg;
+          #(#inspects)*
+          Self {
+            #(#arg_names),*
+          }
         }
       }
     },
