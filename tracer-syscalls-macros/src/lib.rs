@@ -71,6 +71,12 @@ fn gen_syscall_args_struct(
           #number as isize
         }
       }
+
+      impl From<#camel_case_args_type> for #crate_token::SyscallArgs {
+        fn from(args: #camel_case_args_type) -> Self {
+          #crate_token::SyscallArgs::#camel_case_ident(args)
+        }
+      }
     },
     name: camel_case_ident,
     args_struct_type: camel_case_args_type,
@@ -103,7 +109,7 @@ pub fn gen_syscalls(input: TokenStream) -> TokenStream {
     #(#arg_structs)*
     #[non_exhaustive]
     #[derive(Debug, Clone, PartialEq)]
-    enum SyscallArgs {
+    pub enum SyscallArgs {
       #(
         #[cfg(any(#(target_arch = #supported_archs),*))]
         #arg_struct_names(#arg_struct_types),
