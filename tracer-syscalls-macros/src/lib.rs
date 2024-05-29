@@ -92,6 +92,7 @@ pub fn gen_syscalls(input: TokenStream) -> TokenStream {
   let mut arg_struct_names = vec![];
   let mut arg_struct_types = vec![];
   let mut supported_archs = vec![];
+  let mut syscall_numbers = vec![];
   let crate_token = get_crate("tracer-syscalls");
   for syscall in &input {
     let GenSyscallArgsStructResult {
@@ -104,6 +105,7 @@ pub fn gen_syscalls(input: TokenStream) -> TokenStream {
     arg_struct_types.push(args_struct_type);
     arg_struct_names.push(name);
     supported_archs.push(archs);
+    syscall_numbers.push(syscall.number.clone());
   }
   TokenStream::from(quote::quote! {
     #(#arg_structs)*
@@ -114,6 +116,17 @@ pub fn gen_syscalls(input: TokenStream) -> TokenStream {
         #[cfg(any(#(target_arch = #supported_archs),*))]
         #arg_struct_names(#arg_struct_types),
       )*
+    }
+
+    impl #crate_token::SyscallNumber for SyscallArgs {
+      #[inline(always)]
+      fn syscall_number(&self) -> isize {
+        match self {
+          #(
+            SyscallArgs::#arg_struct_names(_) => #syscall_numbers as isize,
+          )*
+        }
+      }
     }
   })
 }
