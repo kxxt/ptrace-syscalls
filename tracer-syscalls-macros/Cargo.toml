@@ -1,0 +1,16 @@
+[package]
+name = "tracer-syscalls-macros"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+convert_case = "0.6.0"
+paste = "1.0.15"
+proc-macro-crate = "3.1.0"
+proc-macro2 = "1.0.84"
+quote = "1.0.36"
+syn = "2.0.66"
