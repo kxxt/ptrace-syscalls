@@ -116,6 +116,7 @@ pub fn gen_syscalls(input: TokenStream) -> TokenStream {
         #[cfg(any(#(target_arch = #supported_archs),*))]
         #arg_struct_names(#arg_struct_types),
       )*
+      Unknown(#crate_token::UnknownArgs),
     }
 
     impl #crate_token::SyscallNumber for SyscallArgs {
@@ -125,6 +126,7 @@ pub fn gen_syscalls(input: TokenStream) -> TokenStream {
           #(
             SyscallArgs::#arg_struct_names(_) => #syscall_numbers as isize,
           )*
+          SyscallArgs::Unknown(args) => args.syscall_number(),
         }
       }
     }
