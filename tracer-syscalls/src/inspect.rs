@@ -30,9 +30,9 @@ pub trait InspectFromPid {
 
 pub type InspectError = Errno;
 
-impl InspectFromPid for CString {
+impl InspectFromPid for Result<CString, InspectError> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    read_cstring(pid, address).unwrap() // FIXME
+    read_cstring(pid, address)
   }
 }
 

@@ -5,7 +5,7 @@ use proc_macro_crate::{crate_name, FoundCrate};
 use quote::{format_ident, quote, ToTokens};
 use syn::{
   braced, bracketed, parse::Parse, parse_macro_input, punctuated::Punctuated, spanned::Spanned,
-  token, Field, Ident, Token,
+  token, Field, Ident, Token, Type,
 };
 
 struct SyscallEntry {
@@ -59,17 +59,20 @@ fn gen_syscall_args_struct(
   let camel_case_args_type = Ident::new(&camel_case_name, name.span());
   let mut inspects = vec![];
   let mut arg_names = vec![];
+  let mut wrapped_arg_types = vec![];
   for (i, arg) in args.iter().enumerate() {
     let arg_name = &arg.ident;
     arg_names.push(arg_name.clone().unwrap());
     let arg_type = &arg.ty;
+    let wrapped_arg_type = wrap_syscall_arg_type(arg_type, crate_token.clone());
+    wrapped_arg_types.push(wrapped_arg_type.clone());
     let literal_i = syn::LitInt::new(&i.to_string(), arg_type.span());
     // TODO: We shouldn't compare types as strings
     match arg_type.to_token_stream().to_string().as_str() {
       // Primitive types
       "i32" | "i64" | "isize" | "i16" | "RawFd" => {
         let inspect = quote! {
-          let #arg_name = syscall_arg!(regs, #literal_i) as #arg_type;
+          let #arg_name = syscall_arg!(regs, #literal_i) as #wrapped_arg_type;
         };
         inspects.push(inspect);
       }
@@ -87,7 +90,7 @@ fn gen_syscall_args_struct(
       #[cfg(any(#(target_arch = #archs),*))]
       #[derive(Debug, Clone, PartialEq)]
       pub struct #camel_case_args_type {
-        #args
+        #(#arg_names: #wrapped_arg_types),*
       }
 
       impl #crate_token::SyscallNumber for #camel_case_args_type {
@@ -194,5 +197,23 @@ fn get_crate(name: &str) -> proc_macro2::TokenStream {
       let ident = format_ident!("{}", &name);
       quote!( #ident )
     }
+  }
+}
+
+fn wrap_syscall_arg_type(
+  ty: &Type,
+  crate_token: proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+  let ty = &ty.to_token_stream().to_string();
+  match ty.as_str() {
+    "i32" => quote!(i32),
+    "i64" => quote!(i64),
+    "isize" => quote!(isize),
+    "i16" => quote!(i16),
+    "RawFd" => quote!(RawFd),
+    "CString" => quote!(Result<CString, #crate_token::InspectError>),
+    "Vec<CString>" => quote!(Result<Vec<CString>, #crate_token::InspectError>),
+    "Pathbuf" => quote!(Result<Pathbuf, #crate_token::InspectError>),
+    _ => panic!("Unsupported syscall arg type: {}", ty),
   }
 }
