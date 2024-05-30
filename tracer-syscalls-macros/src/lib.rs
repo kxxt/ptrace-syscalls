@@ -5,7 +5,7 @@ use proc_macro_crate::{crate_name, FoundCrate};
 use quote::{format_ident, quote, ToTokens};
 use syn::{
   braced, bracketed, parenthesized, parse::Parse, parse_macro_input, punctuated::Punctuated,
-  spanned::Spanned, token, Field, Ident, PathArguments, Token, Type,
+  spanned::Spanned, token, Field, Ident, PathArguments, Token, Type, TypePath,
 };
 
 struct ModifiedArgsExpr {
@@ -180,8 +180,12 @@ fn gen_syscall_args_struct(
   let syscall_result_type = &syscall.result;
   modified_arg_names.push(format_ident!("syscall_result"));
   modified_arg_types.push(quote! { #syscall_result_type });
-  inspect_modified_args.push(quote! {
-    let syscall_result = syscall_res_from_regs!(regs) as #syscall_result_type;
+  inspect_modified_args.push(if syscall_result_type != "Unit" {
+    quote! {
+      let syscall_result = syscall_res_from_regs!(regs) as #syscall_result_type;
+    }
+  } else {
+    quote! {let syscall_result = ();}
   });
   if let Some(modified_args) = &syscall.modified_args {
     for modified_arg in modified_args.args.iter() {
@@ -468,6 +472,7 @@ fn wrap_syscall_arg_type(
       let ty = &ty.path.segments[0];
       let ty_str = ty.to_token_stream().to_string();
       match ty_str.as_str() {
+        "Unit" => (quote!(()), false),
         "RawFd" | "socklen_t" | "c_int" | "c_uint" | "c_ulong" | "i16" | "i32" | "i64"
         | "isize" | "size_t" | "key_serial_t" | "AddressType" | "mode_t" | "uid_t" | "gid_t"
         | "clockid_t" => (ty.to_token_stream(), false),
@@ -482,7 +487,9 @@ fn wrap_syscall_arg_type(
             };
             let arg = arg.args.to_token_stream().to_string();
             match arg.as_str() {
-              "PathBuf" | "timespec" => (quote!(Result<#ty, #crate_token::InspectError>), true),
+              "PathBuf" | "timespec" | "Vec < CString >" => {
+                (quote!(Result<#ty, #crate_token::InspectError>), true)
+              }
               _ => panic!("Unsupported inner syscall arg type: {:?}", arg),
             }
           } else if ty.ident == "Vec" {

@@ -186,7 +186,10 @@ impl InspectFromPid for Result<epoll_event, InspectError> {
   }
 }
 
-impl InspectFromPid for Result<Vec<epoll_event>, InspectError> {
+impl<T> InspectFromPid for Result<Vec<T>, InspectError>
+where
+  Result<T, InspectError>: InspectFromPid,
+{
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }

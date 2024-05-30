@@ -47,6 +47,8 @@ impl FromInspectingRegs for UnknownArgs {
   }
 }
 
+pub type Unit = ();
+
 gen_syscalls! {
   // _llseek (32bit)
   // _newselect
@@ -142,4 +144,14 @@ gen_syscalls! {
   // epoll_wait_old(epfd: RawFd, events: *mut epoll_event, maxevents: c_int, timeout: c_int) /
   //   { epfd: RawFd, maxevents: c_int, timeout: c_int }
   //   -> c_int + { events: Vec<epoll_event> } for [x86_64: 215],
+  eventfd(initval: c_uint) / { initval: c_uint } -> c_int for [x86_64: 284],
+  eventfd2(initval: c_uint, flags: c_int) / { initval: c_uint, flags: c_int } -> c_int for [x86_64: 290, aarch64: 19, riscv64: 19],
+  // exec_with_loader, execv
+  execve(filename: *const c_char, argv: *const *const c_char, envp: *const *const c_char) /
+    { filename: PathBuf, argv: Option<Vec<CString>>, envp: Option<Vec<CString>> } -> c_int for [x86_64: 59, aarch64: 221, riscv64: 221],
+  execveat(dirfd: RawFd, pathname: *const c_char, argv: *const *const c_char, envp: *const *const c_char, flags: c_int) /
+    { dirfd: RawFd, pathname: PathBuf, argv: Option<Vec<CString>>, envp: Option<Vec<CString>>, flags: c_int }
+    -> c_int for [x86_64: 322, aarch64: 281, riscv64: 281],
+  exit(status: c_int) / { status: c_int } -> Unit for [x86_64: 60, aarch64: 93, riscv64: 93],
+  exit_group(status: c_int) / { status: c_int } -> Unit for [x86_64: 231, aarch64: 94, riscv64: 94],
 }
