@@ -87,8 +87,10 @@ impl Parse for Arch {
 
 struct GenSyscallArgsStructResult {
   args_struct: proc_macro2::TokenStream,
+  raw_args_struct: proc_macro2::TokenStream,
   name: Ident,
   args_struct_type: Ident,
+  raw_args_struct_type: Ident,
   archs: Vec<String>,
   syscall_number: Ident,
 }
@@ -125,6 +127,8 @@ fn gen_syscall_args_struct(
   let camel_case_ident = Ident::new(&camel_case_name, name.span());
   camel_case_name.push_str("Args");
   let camel_case_args_type = Ident::new(&camel_case_name, name.span());
+  camel_case_name.replace_range((camel_case_name.len() - 4).., "RawArgs");
+  let camel_case_raw_args_type = Ident::new(&camel_case_name, name.span());
   let mut inspects = vec![];
   let mut arg_names = vec![];
   let mut wrapped_arg_types = vec![];
@@ -155,9 +159,48 @@ fn gen_syscall_args_struct(
       }
     }
   }
+  let mut raw_arg_names = vec![];
+  let mut raw_arg_types = vec![];
+  let mut inspect_raw_args = vec![];
+  for (i, raw_arg) in syscall.raw_args.iter().enumerate() {
+    let arg_name = &raw_arg.ident;
+    raw_arg_names.push(arg_name.clone().unwrap());
+    let arg_type = &raw_arg.ty;
+    raw_arg_types.push(arg_type.clone());
+    let literal_i = syn::LitInt::new(&i.to_string(), arg_type.span());
+    inspect_raw_args.push(quote! {
+      let #arg_name = syscall_arg!(regs, #literal_i) as #arg_type;
+    });
+  }
   let syscall_const_name = format_ident!("SYS_{}", name);
   GenSyscallArgsStructResult {
     syscall_number: syscall_const_name.clone(),
+    raw_args_struct: quote! {
+      #[cfg(any(#(target_arch = #arch_names),*))]
+      #[derive(Debug, Clone, Copy, PartialEq)]
+      pub struct #camel_case_raw_args_type {
+        #(#raw_arg_names: #raw_arg_types),*
+      }
+
+      #[cfg(any(#(target_arch = #arch_names),*))]
+      impl #crate_token::FromInspectingRegs for #camel_case_raw_args_type {
+        fn from_inspecting_regs(pid: #crate_token::Pid, regs: &#crate_token::arch::PtraceRegisters) -> Self {
+          use #crate_token::arch::syscall_arg;
+          #(#inspect_raw_args)*
+          Self {
+            #(#raw_arg_names),*
+          }
+        }
+      }
+
+      #[cfg(any(#(target_arch = #arch_names),*))]
+      impl #crate_token::SyscallNumber for #camel_case_raw_args_type {
+        #[inline(always)]
+        fn syscall_number(&self) -> isize {
+          #syscall_const_name
+        }
+      }
+    },
     args_struct: quote::quote! {
       #[cfg(any(#(target_arch = #arch_names),*))]
       pub const #syscall_const_name: isize = #syscall_number;
@@ -196,6 +239,7 @@ fn gen_syscall_args_struct(
     },
     name: camel_case_ident,
     args_struct_type: camel_case_args_type,
+    raw_args_struct_type: camel_case_raw_args_type,
     archs: arch_names.clone(),
   }
 }
@@ -205,7 +249,9 @@ pub fn gen_syscalls(input: TokenStream) -> TokenStream {
   let input =
     parse_macro_input!(input with Punctuated::<SyscallEntry, syn::Token![,]>::parse_terminated);
   let mut arg_structs = vec![];
-  let mut arg_struct_names = vec![];
+  let mut raw_arg_structs = vec![];
+  let mut names = vec![];
+  let mut raw_arg_struct_types = vec![];
   let mut arg_struct_types = vec![];
   let mut supported_archs = vec![];
   let mut syscall_numbers = vec![];
@@ -217,23 +263,50 @@ pub fn gen_syscalls(input: TokenStream) -> TokenStream {
       args_struct_type,
       archs,
       syscall_number,
+      raw_args_struct,
+      raw_args_struct_type,
     } = gen_syscall_args_struct(syscall, crate_token.clone());
     arg_structs.push(args_struct);
+    raw_arg_structs.push(raw_args_struct);
     arg_struct_types.push(args_struct_type);
-    arg_struct_names.push(name);
+    raw_arg_struct_types.push(raw_args_struct_type);
+    names.push(name);
     supported_archs.push(archs);
     syscall_numbers.push(syscall_number.clone());
   }
   TokenStream::from(quote::quote! {
+    #(#raw_arg_structs)*
     #(#arg_structs)*
+    #[non_exhaustive]
+    #[derive(Debug, Clone, Copy, PartialEq)]
+    pub enum SyscallRawArgs {
+      #(
+        #[cfg(any(#(target_arch = #supported_archs),*))]
+        #names(#raw_arg_struct_types),
+      )*
+      Unknown(#crate_token::UnknownArgs),
+    }
+
     #[non_exhaustive]
     #[derive(Debug, Clone, PartialEq)]
     pub enum SyscallArgs {
       #(
         #[cfg(any(#(target_arch = #supported_archs),*))]
-        #arg_struct_names(#arg_struct_types),
+        #names(#arg_struct_types),
       )*
       Unknown(#crate_token::UnknownArgs),
+    }
+
+    impl #crate_token::SyscallNumber for SyscallRawArgs {
+      #[inline(always)]
+      fn syscall_number(&self) -> isize {
+        match self {
+          #(
+            Self::#names(args) => args.syscall_number(),
+          )*
+          Self::Unknown(args) => args.syscall_number(),
+        }
+      }
     }
 
     impl #crate_token::SyscallNumber for SyscallArgs {
@@ -241,9 +314,9 @@ pub fn gen_syscalls(input: TokenStream) -> TokenStream {
       fn syscall_number(&self) -> isize {
         match self {
           #(
-            SyscallArgs::#arg_struct_names(args) => args.syscall_number(),
+            Self::#names(args) => args.syscall_number(),
           )*
-          SyscallArgs::Unknown(args) => args.syscall_number(),
+          Self::Unknown(args) => args.syscall_number(),
         }
       }
     }
@@ -254,11 +327,27 @@ pub fn gen_syscalls(input: TokenStream) -> TokenStream {
         match syscall_no_from_regs!(regs) as isize {
           #(
             #syscall_numbers => {
-              SyscallArgs::#arg_struct_names(#crate_token::FromInspectingRegs::from_inspecting_regs(pid, regs))
+              Self::#names(#crate_token::FromInspectingRegs::from_inspecting_regs(pid, regs))
             },
           )*
           _ => {
-            SyscallArgs::Unknown(#crate_token::FromInspectingRegs::from_inspecting_regs(pid, regs))
+            Self::Unknown(#crate_token::FromInspectingRegs::from_inspecting_regs(pid, regs))
+          }
+        }
+      }
+    }
+
+    impl #crate_token::FromInspectingRegs for SyscallRawArgs {
+      fn from_inspecting_regs(pid: #crate_token::Pid, regs: &#crate_token::arch::PtraceRegisters) -> Self {
+        use #crate_token::arch::syscall_no_from_regs;
+        match syscall_no_from_regs!(regs) as isize {
+          #(
+            #syscall_numbers => {
+              Self::#names(#crate_token::FromInspectingRegs::from_inspecting_regs(pid, regs))
+            },
+          )*
+          _ => {
+            Self::Unknown(#crate_token::FromInspectingRegs::from_inspecting_regs(pid, regs))
           }
         }
       }

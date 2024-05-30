@@ -7,8 +7,8 @@ use std::{
 };
 
 use nix::libc::{
-  c_char, c_uint, c_ulong, clockid_t, clone_args, epoll_event, gid_t, mode_t, off_t, pid_t, size_t,
-  sockaddr, socklen_t, ssize_t, timespec, timex, uid_t, sigset_t
+  c_char, c_uint, c_ulong, c_void, clockid_t, clone_args, epoll_event, gid_t, mode_t, off_t, pid_t,
+  sigset_t, size_t, sockaddr, socklen_t, ssize_t, timespec, timex, uid_t,
 };
 use nix::sys::ptrace::AddressType;
 use nix::unistd::Pid;
@@ -20,7 +20,7 @@ use crate::{
   FromInspectingRegs, InspectError, SyscallNumber,
 };
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct UnknownArgs {
   pub number: isize,
   pub args: [usize; 6],
