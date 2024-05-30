@@ -8,7 +8,7 @@ use std::{
 
 use nix::{
   errno::Errno,
-  libc::c_long,
+  libc::{c_long, sockaddr},
   sys::ptrace::{self, AddressType},
   unistd::Pid,
 };
@@ -109,4 +109,10 @@ pub fn read_lossy_string_array(
   address: AddressType,
 ) -> Result<Vec<String>, InspectError> {
   read_null_ended_array(pid, address, read_lossy_string)
+}
+
+impl InspectFromPid for Result<sockaddr, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
 }

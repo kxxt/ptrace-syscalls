@@ -4,32 +4,53 @@ use proc_macro::TokenStream;
 use proc_macro_crate::{crate_name, FoundCrate};
 use quote::{format_ident, quote, ToTokens};
 use syn::{
-  braced, bracketed, parse::Parse, parse_macro_input, punctuated::Punctuated, spanned::Spanned,
-  token, Field, Ident, Token, Type,
+  braced, bracketed, parenthesized, parse::Parse, parse_macro_input, punctuated::Punctuated,
+  spanned::Spanned, token, Field, Ident, Token, Type,
 };
 
 struct SyscallEntry {
   name: syn::Ident,
-  number: syn::LitInt,
+  paren_token: token::Paren,
+  raw_args: Punctuated<Field, Token![,]>,
+  separator: Token![/],
   brace_token: token::Brace,
   args: Punctuated<Field, Token![,]>,
   for_tokens: Token![for],
   bracket_token: token::Bracket,
-  archs: Punctuated<Ident, Token![,]>,
+  archs: Punctuated<Arch, Token![,]>,
 }
 
 impl Parse for SyscallEntry {
   fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
     let content;
+    let raw_args;
     let archs_content;
     Ok(SyscallEntry {
       name: input.parse()?,
-      number: input.parse()?,
+      paren_token: parenthesized!(raw_args in input),
+      raw_args: raw_args.parse_terminated(Field::parse_named, Token![,])?,
+      separator: input.parse()?,
       brace_token: braced!(content in input),
       args: content.parse_terminated(Field::parse_named, Token![,])?,
       for_tokens: input.parse()?,
       bracket_token: bracketed!(archs_content in input),
-      archs: archs_content.parse_terminated(Ident::parse, Token![,])?,
+      archs: archs_content.parse_terminated(Arch::parse, Token![,])?,
+    })
+  }
+}
+
+struct Arch {
+  name: syn::Ident,
+  colon: Token![:],
+  number: syn::LitInt,
+}
+
+impl Parse for Arch {
+  fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+    Ok(Arch {
+      name: input.parse()?,
+      colon: input.parse()?,
+      number: input.parse()?,
     })
   }
 }
@@ -39,20 +60,37 @@ struct GenSyscallArgsStructResult {
   name: Ident,
   args_struct_type: Ident,
   archs: Vec<String>,
+  syscall_number: Ident,
 }
 
 fn gen_syscall_args_struct(
   syscall: &SyscallEntry,
   crate_token: proc_macro2::TokenStream,
 ) -> GenSyscallArgsStructResult {
-  let number = &syscall.number;
   let name = &syscall.name;
   let args = &syscall.args;
-  let archs = &syscall
+  let arch_name_0 = syscall.archs.first().as_ref().unwrap().name.to_string();
+  let arch_number_0 = &syscall.archs.first().as_ref().unwrap().number;
+  let (mut arch_names, numbers): (Vec<_>, Vec<_>) = syscall
     .archs
     .iter()
-    .map(|x| x.to_string())
-    .collect::<Vec<_>>();
+    .skip(1)
+    .map(|x| (x.name.to_string(), x.number.clone()))
+    .unzip();
+  let syscall_number = quote! {
+    if cfg!(target_arch = #arch_name_0) {
+      #arch_number_0
+    }
+    #(
+    else if cfg!(target_arch = #arch_names) {
+      #numbers
+    }
+    )*
+    else {
+      unreachable!()
+    }
+  };
+  arch_names.insert(0, arch_name_0);
   let mut camel_case_name = name.to_string().to_case(Case::UpperCamel);
   let camel_case_ident = Ident::new(&camel_case_name, name.span());
   camel_case_name.push_str("Args");
@@ -70,7 +108,7 @@ fn gen_syscall_args_struct(
     // TODO: We shouldn't compare types as strings
     match arg_type.to_token_stream().to_string().as_str() {
       // Primitive types
-      "i32" | "i64" | "isize" | "i16" | "RawFd" => {
+      "i32" | "i64" | "isize" | "i16" | "RawFd" | "socklen_t" => {
         let inspect = quote! {
           let #arg_name = syscall_arg!(regs, #literal_i) as #wrapped_arg_type;
         };
@@ -85,9 +123,15 @@ fn gen_syscall_args_struct(
       }
     }
   }
+  let syscall_const_name = format_ident!("SYS_{}", name);
   GenSyscallArgsStructResult {
+    syscall_number: syscall_const_name.clone(),
     args_struct: quote::quote! {
-      #[cfg(any(#(target_arch = #archs),*))]
+      #[cfg(any(#(target_arch = #arch_names),*))]
+      #[allow(non_upper_case_globals)]
+      pub const #syscall_const_name: isize = #syscall_number;
+
+      #[cfg(any(#(target_arch = #arch_names),*))]
       #[derive(Debug, Clone, PartialEq)]
       pub struct #camel_case_args_type {
         #(#arg_names: #wrapped_arg_types),*
@@ -96,7 +140,7 @@ fn gen_syscall_args_struct(
       impl #crate_token::SyscallNumber for #camel_case_args_type {
         #[inline(always)]
         fn syscall_number(&self) -> isize {
-          #number as isize
+          #syscall_const_name
         }
       }
 
@@ -118,7 +162,7 @@ fn gen_syscall_args_struct(
     },
     name: camel_case_ident,
     args_struct_type: camel_case_args_type,
-    archs: archs.clone(),
+    archs: arch_names.clone(),
   }
 }
 
@@ -138,12 +182,13 @@ pub fn gen_syscalls(input: TokenStream) -> TokenStream {
       name,
       args_struct_type,
       archs,
+      syscall_number,
     } = gen_syscall_args_struct(syscall, crate_token.clone());
     arg_structs.push(args_struct);
     arg_struct_types.push(args_struct_type);
     arg_struct_names.push(name);
     supported_archs.push(archs);
-    syscall_numbers.push(syscall.number.clone());
+    syscall_numbers.push(syscall_number.clone());
   }
   TokenStream::from(quote::quote! {
     #(#arg_structs)*
@@ -162,7 +207,7 @@ pub fn gen_syscalls(input: TokenStream) -> TokenStream {
       fn syscall_number(&self) -> isize {
         match self {
           #(
-            SyscallArgs::#arg_struct_names(_) => #syscall_numbers as isize,
+            SyscallArgs::#arg_struct_names(args) => args.syscall_number(),
           )*
           SyscallArgs::Unknown(args) => args.syscall_number(),
         }
@@ -172,7 +217,7 @@ pub fn gen_syscalls(input: TokenStream) -> TokenStream {
     impl #crate_token::FromInspectingRegs for SyscallArgs {
       fn from_inspecting_regs(pid: #crate_token::Pid, regs: &#crate_token::arch::PtraceRegisters) -> Self {
         use #crate_token::arch::syscall_no_from_regs;
-        match syscall_no_from_regs!(regs) {
+        match syscall_no_from_regs!(regs) as isize {
           #(
             #syscall_numbers => {
               SyscallArgs::#arg_struct_names(#crate_token::FromInspectingRegs::from_inspecting_regs(pid, regs))
@@ -210,6 +255,8 @@ fn wrap_syscall_arg_type(
     "i64" => quote!(i64),
     "isize" => quote!(isize),
     "i16" => quote!(i16),
+    "socklen_t" => quote!(socklen_t),
+    "sockaddr" => quote!(Result<sockaddr, #crate_token::InspectError>),
     "RawFd" => quote!(RawFd),
     "CString" => quote!(Result<CString, #crate_token::InspectError>),
     "Vec<CString>" => quote!(Result<Vec<CString>, #crate_token::InspectError>),

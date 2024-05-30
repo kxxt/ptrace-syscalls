@@ -9,6 +9,7 @@ proc-macro = true
 
 [dependencies]
 convert_case = "0.6.0"
+itertools = "0.13.0"
 paste = "1.0.15"
 proc-macro-crate = "3.1.0"
 proc-macro2 = "1.0.84"
