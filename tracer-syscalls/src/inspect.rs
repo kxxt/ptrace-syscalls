@@ -8,7 +8,7 @@ use std::{
 
 use nix::{
   errno::Errno,
-  libc::{c_long, clone_args, sockaddr, timespec, timex},
+  libc::{c_long, clone_args, epoll_event, sigset_t, sockaddr, timespec, timex},
   sys::ptrace::{self, AddressType},
   unistd::Pid,
 };
@@ -126,12 +126,6 @@ impl InspectFromPid for Result<PathBuf, InspectError> {
   }
 }
 
-impl InspectFromPid for Result<Option<PathBuf>, InspectError> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
 impl InspectFromPid for Result<Vec<u8>, InspectError> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
@@ -171,5 +165,36 @@ impl InspectFromPid for Result<clone_args, InspectError> {
 impl InspectFromPid for Result<i64, InspectError> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
+  }
+}
+
+impl InspectFromPid for Result<epoll_event, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+impl InspectFromPid for Result<Vec<epoll_event>, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+impl InspectFromPid for Result<sigset_t, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+impl<T> InspectFromPid for Result<Option<T>, InspectError>
+where
+  Result<T, InspectError>: InspectFromPid,
+{
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    if address.is_null() {
+      Ok(None)
+    } else {
+      Ok(Some(Result::<T, InspectError>::inspect_from(pid, address)?))
+    }
   }
 }

@@ -7,8 +7,8 @@ use std::{
 };
 
 use nix::libc::{
-  c_char, c_uint, c_ulong, clockid_t, clone_args, gid_t, mode_t, off_t, pid_t, size_t, sockaddr,
-  socklen_t, ssize_t, timespec, timex, uid_t,
+  c_char, c_uint, c_ulong, clockid_t, clone_args, epoll_event, gid_t, mode_t, off_t, pid_t, size_t,
+  sockaddr, socklen_t, ssize_t, timespec, timex, uid_t, sigset_t
 };
 use nix::sys::ptrace::AddressType;
 use nix::unistd::Pid;
@@ -122,4 +122,24 @@ gen_syscalls! {
   dup(oldfd: RawFd) / { oldfd: RawFd } -> c_int for [x86_64: 32, aarch64: 23, riscv64: 23],
   dup2(oldfd: RawFd, newfd: RawFd) / { oldfd: RawFd, newfd: RawFd } -> c_int for [x86_64: 33, aarch64: 24, riscv64: 24],
   dup3(oldfd: RawFd, newfd: RawFd, flags: c_int) / { oldfd: RawFd, newfd: RawFd, flags: c_int } -> c_int for [x86_64: 292, aarch64: 24, riscv64: 24],
+  epoll_create(size: c_int) / { size: c_int } -> c_int for [x86_64: 213],
+  epoll_create1(flags: c_int) / { flags: c_int } -> c_int for [x86_64: 291, aarch64: 20, riscv64: 20],
+  epoll_ctl(epfd: RawFd, op: c_int, fd: RawFd, event: *mut epoll_event) /
+    { epfd: RawFd, op: c_int, fd: RawFd, event: epoll_event } -> c_int for [x86_64: 233, aarch64: 21, riscv64: 21],
+  // TODO: epoll_ctl_old
+  // epoll_ctl_old(epfd: RawFd, op: c_int, fd: RawFd, event: *mut epoll_event) /
+  //   { epfd: RawFd, op: c_int, fd: RawFd, event: epoll_event } -> c_int for [x86_64: 214],
+  epoll_pwait(epfd: RawFd, events: *mut epoll_event, maxevents: c_int, timeout: c_int, sigmask: *const sigset_t) /
+    { epfd: RawFd, maxevents: c_int, timeout: c_int, sigmask: sigset_t }
+    -> c_int + { events: Vec<epoll_event> } for [x86_64: 281, aarch64: 22, riscv64: 22],
+  epoll_pwait2(epfd: RawFd, events: *mut epoll_event, maxevents: c_int, timeout: *const timespec, sigmask: *const sigset_t) /
+    { epfd: RawFd, maxevents: c_int, timeout: Option<timespec>, sigmask: sigset_t }
+    -> c_int + { events: Vec<epoll_event> } for [x86_64: 441, aarch64: 441, riscv64: 441],
+  epoll_wait(epfd: RawFd, events: *mut epoll_event, maxevents: c_int, timeout: c_int) /
+    { epfd: RawFd, maxevents: c_int, timeout: c_int }
+    -> c_int + { events: Vec<epoll_event> } for [x86_64: 232],
+  // TODO: epoll_wait_old
+  // epoll_wait_old(epfd: RawFd, events: *mut epoll_event, maxevents: c_int, timeout: c_int) /
+  //   { epfd: RawFd, maxevents: c_int, timeout: c_int }
+  //   -> c_int + { events: Vec<epoll_event> } for [x86_64: 215],
 }

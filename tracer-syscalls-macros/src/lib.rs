@@ -292,7 +292,7 @@ fn wrap_syscall_arg_type(
         | "isize" | "size_t" | "key_serial_t" | "AddressType" | "mode_t" | "uid_t" | "gid_t"
         | "clockid_t" => ty.to_token_stream(),
         "sockaddr" | "CString" | "PathBuf" | "timex" | "cap_user_header" | "cap_user_data"
-        | "timespec" | "clone_args" => {
+        | "timespec" | "clone_args" | "epoll_event" | "sigset_t" => {
           quote!(Result<#ty, #crate_token::InspectError>)
         }
         _ => {
@@ -311,8 +311,7 @@ fn wrap_syscall_arg_type(
             };
             let arg = arg.args.to_token_stream().to_string();
             match arg.as_str() {
-              "CString" => quote!(Result<Vec<CString>, #crate_token::InspectError>),
-              "u8" => quote!(Result<Vec<u8>, #crate_token::InspectError>),
+              "u8" | "CString" | "epoll_event" => quote!(Result<#ty, #crate_token::InspectError>),
               _ => panic!("Unsupported inner syscall arg type: {:?}", arg),
             }
           } else if ty.ident == "Result" {
