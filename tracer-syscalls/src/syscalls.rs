@@ -1,8 +1,9 @@
 #![allow(non_upper_case_globals)]
 
 use std::{ffi::c_int, os::fd::RawFd};
+use std::path::PathBuf;
 
-use nix::libc::{sockaddr, socklen_t};
+use nix::libc::{sockaddr, socklen_t, c_char};
 use nix::unistd::Pid;
 use tracer_syscalls_macros::gen_syscalls;
 
@@ -39,15 +40,15 @@ impl FromInspectingRegs for UnknownArgs {
 }
 
 gen_syscalls! {
-  fake (number: i32) / { number: i32 } for [x86_64: 0, aarch64: 0, riscv64: 0],
+  fake (number: i32) / { number: i32 } -> i32 for [x86_64: 0, aarch64: 0, riscv64: 0],
   // _llseek (32bit)
   // _newselect
   accept (socketfd: c_int, addr: *mut sockaddr, addrlen: *mut socklen_t) /
-    { socketfd: RawFd, addr: sockaddr, addrlen: socklen_t } for [x86_64: 43, aarch64: 202, riscv64: 202],
+    { socketfd: RawFd, addr: sockaddr, addrlen: socklen_t } -> c_int+addr+addrlen for [x86_64: 43, aarch64: 202, riscv64: 202],
   accept4 (socketfd: RawFd, addr: *mut sockaddr, addrlen: *mut socklen_t, flags: c_int) /
-    { socketfd: RawFd, addr: sockaddr, addrlen: socklen_t, flags: c_int } for [x86_64: 288, aarch64: 242, riscv64: 242],
-  // access { pathname: PathBuf, mode: c_int } for [x86_64: 21],
-  // acct { filename: Option<PathBuf> } for [x86_64: 163, aarch64: 89, riscv64: 89],
+    { socketfd: RawFd, addr: sockaddr, addrlen: socklen_t, flags: c_int } -> c_int+addr+addrlen for [x86_64: 288, aarch64: 242, riscv64: 242],
+  access (pathname: *const c_char, mode: c_int) / { pathname: PathBuf, mode: c_int } -> c_int for [x86_64: 21],
+  acct (filename: *const c_char) / { filename: Option<PathBuf> } -> c_int for [x86_64: 163, aarch64: 89, riscv64: 89],
   // TODO: should we copy the payload? Maybe it should be up to the tracer to decide.
   // add_key { type: CString, description: CString, payload: *const c_void, plen: size_t, keyring: key_serial_t } for [x86_64: 248, aarch64: 217, riscv64: 217],
   // adjtimex { buf: timex } for [x86_64: 159, aarch64: 171, riscv64: 171],

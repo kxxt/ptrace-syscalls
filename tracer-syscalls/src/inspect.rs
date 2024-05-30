@@ -116,3 +116,15 @@ impl InspectFromPid for Result<sockaddr, InspectError> {
     todo!()
   }
 }
+
+impl InspectFromPid for Result<PathBuf, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+impl InspectFromPid for Result<Option<PathBuf>, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}

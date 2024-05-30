@@ -5,7 +5,7 @@ use proc_macro_crate::{crate_name, FoundCrate};
 use quote::{format_ident, quote, ToTokens};
 use syn::{
   braced, bracketed, parenthesized, parse::Parse, parse_macro_input, punctuated::Punctuated,
-  spanned::Spanned, token, Field, Ident, Token, Type,
+  spanned::Spanned, token, Field, Ident, PathArguments, Token, Type,
 };
 
 struct SyscallEntry {
@@ -15,6 +15,8 @@ struct SyscallEntry {
   separator: Token![/],
   brace_token: token::Brace,
   args: Punctuated<Field, Token![,]>,
+  arrow: Token![->],
+  ret: Punctuated<Ident, Token![+]>,
   for_tokens: Token![for],
   bracket_token: token::Bracket,
   archs: Punctuated<Arch, Token![,]>,
@@ -32,6 +34,8 @@ impl Parse for SyscallEntry {
       separator: input.parse()?,
       brace_token: braced!(content in input),
       args: content.parse_terminated(Field::parse_named, Token![,])?,
+      arrow: input.parse()?,
+      ret: Punctuated::<Ident, Token![+]>::parse_separated_nonempty(input)?,
       for_tokens: input.parse()?,
       bracket_token: bracketed!(archs_content in input),
       archs: archs_content.parse_terminated(Arch::parse, Token![,])?,
@@ -248,19 +252,48 @@ fn wrap_syscall_arg_type(
   ty: &Type,
   crate_token: proc_macro2::TokenStream,
 ) -> proc_macro2::TokenStream {
-  let ty = &ty.to_token_stream().to_string();
-  match ty.as_str() {
-    "i32" => quote!(i32),
-    "i64" => quote!(i64),
-    "isize" => quote!(isize),
-    "i16" => quote!(i16),
-    "c_int" => quote!(c_int),
-    "socklen_t" => quote!(socklen_t),
-    "sockaddr" => quote!(Result<sockaddr, #crate_token::InspectError>),
-    "RawFd" => quote!(RawFd),
-    "CString" => quote!(Result<CString, #crate_token::InspectError>),
-    "Vec<CString>" => quote!(Result<Vec<CString>, #crate_token::InspectError>),
-    "Pathbuf" => quote!(Result<Pathbuf, #crate_token::InspectError>),
-    _ => panic!("Unsupported syscall arg type: {}", ty),
+  match ty {
+    Type::Path(ty) => {
+      assert_eq!(ty.path.segments.len(), 1);
+      let ty = &ty.path.segments[0];
+
+      let ty_str = ty.to_token_stream().to_string();
+      match ty_str.as_str() {
+        "i32" => quote!(i32),
+        "i64" => quote!(i64),
+        "isize" => quote!(isize),
+        "i16" => quote!(i16),
+        "c_int" => quote!(c_int),
+        "socklen_t" => quote!(socklen_t),
+        "sockaddr" => quote!(Result<sockaddr, #crate_token::InspectError>),
+        "RawFd" => quote!(RawFd),
+        "CString" => quote!(Result<CString, #crate_token::InspectError>),
+        "PathBuf" => quote!(Result<PathBuf, #crate_token::InspectError>),
+        _ => {
+          if ty.ident == "Option" {
+            let PathArguments::AngleBracketed(arg) = &ty.arguments else {
+              panic!("Unsupported syscall arg type: {:?}", ty_str);
+            };
+            let arg = arg.args.to_token_stream().to_string();
+            match arg.as_str() {
+              "PathBuf" => quote!(Result<Option<PathBuf>, #crate_token::InspectError>),
+              _ => panic!("Unsupported syscall arg type: {:?}", arg),
+            }
+          } else if ty.ident == "Vec" {
+            let PathArguments::AngleBracketed(arg) = &ty.arguments else {
+              panic!("Unsupported syscall arg type: {:?}", ty_str);
+            };
+            let arg = arg.args.to_token_stream().to_string();
+            match arg.as_str() {
+              "CString" => quote!(Result<Vec<CString>, #crate_token::InspectError>),
+              _ => panic!("Unsupported syscall arg type: {:?}", arg),
+            }
+          } else {
+            panic!("Unsupported syscall arg type: {:?}", ty_str);
+          }
+        }
+      }
+    }
+    _ => panic!("Multi segment path is not supported here"),
   }
 }
