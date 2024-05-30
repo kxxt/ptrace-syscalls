@@ -51,10 +51,10 @@ gen_syscalls! {
   // _llseek (32bit)
   // _newselect
   accept(socketfd: c_int, addr: *mut sockaddr, addrlen: *mut socklen_t) /
-    { socketfd: RawFd, addr: sockaddr, addrlen: socklen_t } -> c_int + { addr: sockaddr, addrlen: socklen_t }
+    { socketfd: RawFd, addr: sockaddr, addrlen: socklen_t } -> c_int + { addr: sockaddr, addrlen: Result<socklen_t, InspectError> }
     for [x86_64: 43, aarch64: 202, riscv64: 202],
   accept4(socketfd: RawFd, addr: *mut sockaddr, addrlen: *mut socklen_t, flags: c_int) /
-    { socketfd: RawFd, addr: sockaddr, addrlen: socklen_t, flags: c_int } -> c_int + { addr: sockaddr, addrlen: socklen_t }
+    { socketfd: RawFd, addr: sockaddr, addrlen: socklen_t, flags: c_int } -> c_int + { addr: sockaddr, addrlen: Result<socklen_t, InspectError> }
     for [x86_64: 288, aarch64: 242, riscv64: 242],
   access(pathname: *const c_char, mode: c_int) / { pathname: PathBuf, mode: c_int } -> c_int for [x86_64: 21],
   acct(filename: *const c_char) / { filename: Option<PathBuf> } -> c_int for [x86_64: 163, aarch64: 89, riscv64: 89],
