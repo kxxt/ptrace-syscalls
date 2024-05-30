@@ -8,6 +8,23 @@ use syn::{
   spanned::Spanned, token, Field, Ident, PathArguments, Token, Type,
 };
 
+struct ModifiedArgsExpr {
+  plus: Token![+],
+  brace_token: token::Brace,
+  args: Punctuated<Field, Token![,]>,
+}
+
+impl Parse for ModifiedArgsExpr {
+  fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+    let content;
+    Ok(Self {
+      plus: input.parse()?,
+      brace_token: braced!(content in input),
+      args: content.parse_terminated(Field::parse_named, Token![,])?,
+    })
+  }
+}
+
 struct SyscallEntry {
   name: syn::Ident,
   paren_token: token::Paren,
@@ -16,8 +33,9 @@ struct SyscallEntry {
   brace_token: token::Brace,
   args: Punctuated<Field, Token![,]>,
   arrow: Token![->],
-  ret: Punctuated<Ident, Token![+]>,
-  for_tokens: Token![for],
+  result: Ident,
+  modified_args: Option<ModifiedArgsExpr>,
+  for_token: Token![for],
   bracket_token: token::Bracket,
   archs: Punctuated<Arch, Token![,]>,
 }
@@ -35,8 +53,16 @@ impl Parse for SyscallEntry {
       brace_token: braced!(content in input),
       args: content.parse_terminated(Field::parse_named, Token![,])?,
       arrow: input.parse()?,
-      ret: Punctuated::<Ident, Token![+]>::parse_separated_nonempty(input)?,
-      for_tokens: input.parse()?,
+      result: input.parse()?,
+      modified_args: {
+        let lookahead = input.lookahead1();
+        if lookahead.peek(token::Plus) {
+          Some(input.parse()?)
+        } else {
+          None
+        }
+      },
+      for_token: input.parse()?,
       bracket_token: bracketed!(archs_content in input),
       archs: archs_content.parse_terminated(Arch::parse, Token![,])?,
     })
@@ -141,6 +167,7 @@ fn gen_syscall_args_struct(
         #(#arg_names: #wrapped_arg_types),*
       }
 
+      #[cfg(any(#(target_arch = #arch_names),*))]
       impl #crate_token::SyscallNumber for #camel_case_args_type {
         #[inline(always)]
         fn syscall_number(&self) -> isize {
@@ -148,12 +175,14 @@ fn gen_syscall_args_struct(
         }
       }
 
+      #[cfg(any(#(target_arch = #arch_names),*))]
       impl From<#camel_case_args_type> for #crate_token::SyscallArgs {
         fn from(args: #camel_case_args_type) -> Self {
           #crate_token::SyscallArgs::#camel_case_ident(args)
         }
       }
 
+      #[cfg(any(#(target_arch = #arch_names),*))]
       impl #crate_token::FromInspectingRegs for #camel_case_args_type {
         fn from_inspecting_regs(pid: #crate_token::Pid, regs: &#crate_token::arch::PtraceRegisters) -> Self {
           use #crate_token::arch::syscall_arg;
@@ -260,10 +289,10 @@ fn wrap_syscall_arg_type(
       let ty_str = ty.to_token_stream().to_string();
       match ty_str.as_str() {
         "RawFd" | "socklen_t" | "c_int" | "c_uint" | "c_ulong" | "i16" | "i32" | "i64"
-        | "isize" | "size_t" | "key_serial_t" | "AddressType" | "mode_t" | "uid_t" | "gid_t" | "clockid_t" => {
-          ty.to_token_stream()
-        }
-        "sockaddr" | "CString" | "PathBuf" | "timex" | "cap_user_header" | "cap_user_data" => {
+        | "isize" | "size_t" | "key_serial_t" | "AddressType" | "mode_t" | "uid_t" | "gid_t"
+        | "clockid_t" => ty.to_token_stream(),
+        "sockaddr" | "CString" | "PathBuf" | "timex" | "cap_user_header" | "cap_user_data"
+        | "timespec" | "clone_args" => {
           quote!(Result<#ty, #crate_token::InspectError>)
         }
         _ => {
@@ -273,19 +302,21 @@ fn wrap_syscall_arg_type(
             };
             let arg = arg.args.to_token_stream().to_string();
             match arg.as_str() {
-              "PathBuf" => quote!(Result<Option<PathBuf>, #crate_token::InspectError>),
-              _ => panic!("Unsupported syscall arg type: {:?}", arg),
+              "PathBuf" | "timespec" => quote!(Result<#ty, #crate_token::InspectError>),
+              _ => panic!("Unsupported inner syscall arg type: {:?}", arg),
             }
           } else if ty.ident == "Vec" {
             let PathArguments::AngleBracketed(arg) = &ty.arguments else {
-              panic!("Unsupported syscall arg type: {:?}", ty_str);
+              panic!("Unsupported inner syscall arg type: {:?}", ty_str);
             };
             let arg = arg.args.to_token_stream().to_string();
             match arg.as_str() {
               "CString" => quote!(Result<Vec<CString>, #crate_token::InspectError>),
               "u8" => quote!(Result<Vec<u8>, #crate_token::InspectError>),
-              _ => panic!("Unsupported syscall arg type: {:?}", arg),
+              _ => panic!("Unsupported inner syscall arg type: {:?}", arg),
             }
+          } else if ty.ident == "Result" {
+            quote!(#ty)
           } else {
             panic!("Unsupported syscall arg type: {:?}", ty_str);
           }

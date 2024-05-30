@@ -8,7 +8,7 @@ use std::{
 
 use nix::{
   errno::Errno,
-  libc::{c_long, sockaddr, timex},
+  libc::{c_long, clone_args, sockaddr, timespec, timex},
   sys::ptrace::{self, AddressType},
   unistd::Pid,
 };
@@ -151,6 +151,24 @@ impl InspectFromPid for Result<cap_user_data, InspectError> {
 }
 
 impl InspectFromPid for Result<cap_user_header, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+impl InspectFromPid for Result<timespec, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+impl InspectFromPid for Result<clone_args, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+impl InspectFromPid for Result<i64, InspectError> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
