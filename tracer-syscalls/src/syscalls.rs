@@ -154,4 +154,50 @@ gen_syscalls! {
     -> c_int for [x86_64: 322, aarch64: 281, riscv64: 281],
   exit(status: c_int) / { status: c_int } -> Unit for [x86_64: 60, aarch64: 93, riscv64: 93],
   exit_group(status: c_int) / { status: c_int } -> Unit for [x86_64: 231, aarch64: 94, riscv64: 94],
+  faccessat(dirfd: RawFd, pathname: *const c_char, mode: c_int) /
+    { dirfd: RawFd, pathname: PathBuf, mode: c_int } -> c_int for [x86_64: 269, aarch64: 48, riscv64: 48],
+  faccessat2(dirfd: RawFd, pathname: *const c_char, mode: c_int, flags: c_int) /
+    { dirfd: RawFd, pathname: PathBuf, mode: c_int, flags: c_int } -> c_int for [x86_64: 439, aarch64: 439, riscv64: 439],
+  fadvise64(fd: RawFd, offset: off_t, len: size_t, advice: c_int) /
+    { fd: RawFd, offset: off_t, len: size_t, advice: c_int } -> c_int for [x86_64: 221, aarch64: 223, riscv64: 223],
+  // fadvise64_64(fd: RawFd, offset: off_t, len: off_t, advice: c_int) /
+  //   { fd: RawFd, offset: off_t, len: off_t, advice: c_int } -> c_int for [],
+  fallocate(fd: RawFd, mode: c_int, offset: off_t, len: off_t) /
+    { fd: RawFd, mode: c_int, offset: off_t, len: off_t } -> c_int for [x86_64: 285, aarch64: 47, riscv64: 47],
+  fanotify_init(flags: c_uint, event_f_flags: c_uint) /
+    { flags: c_uint, event_f_flags: c_uint } -> c_int for [x86_64: 300, aarch64: 262, riscv64: 262],
+  fanotify_mark(fanotify_fd: RawFd, flags: c_uint, mask: u64, dirfd: RawFd, pathname: *const c_char) /
+    { fanotify_fd: RawFd, flags: c_uint, mask: u64, dirfd: RawFd, pathname: Option<PathBuf> } -> c_int for [x86_64: 301, aarch64: 263, riscv64: 263],
+  fchdir(fd: RawFd) / { fd: RawFd } -> c_int for [x86_64: 81, aarch64: 50, riscv64: 50],
+  fchmod(fd: RawFd, mode: mode_t) / { fd: RawFd, mode: mode_t } -> c_int for [x86_64: 91, aarch64: 52, riscv64: 52],
+  fchmodat(dirfd: RawFd, pathname: *const c_char, mode: mode_t) /
+    { dirfd: RawFd, pathname: PathBuf, mode: mode_t } -> c_int for [x86_64: 268, aarch64: 53, riscv64: 53],
+  fchmodat2(dirfd: RawFd, pathname: *const c_char, mode: mode_t, flags: c_int) /
+    { dirfd: RawFd, pathname: PathBuf, mode: mode_t, flags: c_int } -> c_int for [x86_64: 452, aarch64: 452, riscv64: 452],
+  fchown(fd: RawFd, owner: uid_t, group: gid_t) / { fd: RawFd, owner: uid_t, group: gid_t } -> c_int for [x86_64: 93, aarch64: 55, riscv64: 55],
+  // fchown32
+  fchownat(dirfd: RawFd, pathname: *const c_char, owner: uid_t, group: gid_t, flags: c_int) /
+    { dirfd: RawFd, pathname: PathBuf, owner: uid_t, group: gid_t, flags: c_int } -> c_int for [x86_64: 260, aarch64: 54, riscv64: 54],
+  fcntl(fd: RawFd, cmd: c_int, arg: usize) / { fd: RawFd, cmd: c_int, arg: usize } -> c_int for [x86_64: 72, aarch64: 25, riscv64: 25],
+  // fcntl64
+  fdatasync(fd: RawFd) / { fd: RawFd } -> c_int for [x86_64: 75, aarch64: 83, riscv64: 83],
+  fgetxattr(fd: RawFd, name: *const c_char, value: *mut c_void, size: size_t) /
+    { fd: RawFd, name: CString, value: CString, size: size_t } -> ssize_t for [x86_64: 193, aarch64: 10, riscv64: 10],
+  finit_module(fd: RawFd, param_values: *const c_char, flags: c_int) /
+    { fd: RawFd, param_values: CString, flags: c_int } -> c_int for [x86_64: 313, aarch64: 273, riscv64: 273],
+  flistxattr(fd: RawFd, list: *mut c_char, size: size_t) /
+    { fd: RawFd, list: Option<CString>, size: size_t } -> ssize_t for [x86_64: 194, aarch64: 11, riscv64: 11],
+  flock(fd: RawFd, operation: c_int) / { fd: RawFd, operation: c_int } -> c_int for [x86_64: 73, aarch64: 32, riscv64: 32],
+  fork() / {} -> pid_t for [x86_64: 57],
+  fremovexattr(fd: RawFd, name: *const c_char) / { fd: RawFd, name: CString } -> c_int for [x86_64: 196, aarch64: 16, riscv64: 16],
+  // fsconfig: https://go-review.googlesource.com/c/sys/+/484995 and https://lwn.net/Articles/766155/
+  fsconfig(fd: RawFd, cmd: c_uint, key: *const c_char, value: *const c_char, aux: c_int) /
+    { fd: RawFd, cmd: c_uint, key: CString, value: CString, aux: c_int } -> c_int for [x86_64: 431, aarch64: 431, riscv64: 431],
+  fsetxattr(fd: RawFd, name: *const c_char, value: *const c_void, size: size_t, flags: c_int) /
+    { fd: RawFd, name: CString, value: CString, size: size_t, flags: c_int } -> c_int for [x86_64: 190, aarch64: 7, riscv64: 7],
+  // https://lwn.net/Articles/759499/ 
+  fsmount(fd: RawFd, flags: c_uint, ms_flags: c_uint) /
+    { fd: RawFd, flags: c_uint, ms_flags: c_uint } -> c_int for [x86_64: 432, aarch64: 432, riscv64: 432],
+  fsopen(fsname: *const c_char, flags: c_uint) / { fsname: CString, flags: c_uint } -> c_int for [x86_64: 430, aarch64: 430, riscv64: 430],
+  fspick(dirfd: RawFd, pathname: *const c_char, flags: c_uint) / { dirfd: RawFd, pathname: CString, flags: c_uint } -> c_int for [x86_64: 433, aarch64: 433, riscv64: 433],
 }

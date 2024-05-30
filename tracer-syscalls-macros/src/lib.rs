@@ -473,8 +473,8 @@ fn wrap_syscall_arg_type(
       let ty_str = ty.to_token_stream().to_string();
       match ty_str.as_str() {
         "Unit" => (quote!(()), false),
-        "RawFd" | "socklen_t" | "c_int" | "c_uint" | "c_ulong" | "i16" | "i32" | "i64"
-        | "isize" | "size_t" | "key_serial_t" | "AddressType" | "mode_t" | "uid_t" | "gid_t"
+        "RawFd" | "socklen_t" | "c_int" | "c_uint" | "c_ulong" | "i16" | "i32" | "i64" | "u64" | "usize"
+        | "isize" | "size_t" | "key_serial_t" | "AddressType" | "mode_t" | "uid_t" | "gid_t" | "off_t"
         | "clockid_t" => (ty.to_token_stream(), false),
         "sockaddr" | "CString" | "PathBuf" | "timex" | "cap_user_header" | "cap_user_data"
         | "timespec" | "clone_args" | "epoll_event" | "sigset_t" => {
@@ -487,7 +487,7 @@ fn wrap_syscall_arg_type(
             };
             let arg = arg.args.to_token_stream().to_string();
             match arg.as_str() {
-              "PathBuf" | "timespec" | "Vec < CString >" => {
+              "PathBuf" | "timespec" | "Vec < CString >" | "CString"=> {
                 (quote!(Result<#ty, #crate_token::InspectError>), true)
               }
               _ => panic!("Unsupported inner syscall arg type: {:?}", arg),
