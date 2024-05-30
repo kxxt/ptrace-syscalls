@@ -112,7 +112,8 @@ fn gen_syscall_args_struct(
     // TODO: We shouldn't compare types as strings
     match arg_type.to_token_stream().to_string().as_str() {
       // Primitive types
-      "i32" | "i64" | "isize" | "i16" | "RawFd" | "socklen_t" | "c_int" => {
+      "i32" | "i64" | "isize" | "i16" | "RawFd" | "socklen_t" | "c_int" | "c_uint" | "c_ulong"
+      | "key_serial_t" | "size_t" | "AddressType" | "mode_t" | "uid_t" | "gid_t" | "clockid_t" => {
         let inspect = quote! {
           let #arg_name = syscall_arg!(regs, #literal_i) as #wrapped_arg_type;
         };
@@ -256,19 +257,15 @@ fn wrap_syscall_arg_type(
     Type::Path(ty) => {
       assert_eq!(ty.path.segments.len(), 1);
       let ty = &ty.path.segments[0];
-
       let ty_str = ty.to_token_stream().to_string();
       match ty_str.as_str() {
-        "i32" => quote!(i32),
-        "i64" => quote!(i64),
-        "isize" => quote!(isize),
-        "i16" => quote!(i16),
-        "c_int" => quote!(c_int),
-        "socklen_t" => quote!(socklen_t),
-        "sockaddr" => quote!(Result<sockaddr, #crate_token::InspectError>),
-        "RawFd" => quote!(RawFd),
-        "CString" => quote!(Result<CString, #crate_token::InspectError>),
-        "PathBuf" => quote!(Result<PathBuf, #crate_token::InspectError>),
+        "RawFd" | "socklen_t" | "c_int" | "c_uint" | "c_ulong" | "i16" | "i32" | "i64"
+        | "isize" | "size_t" | "key_serial_t" | "AddressType" | "mode_t" | "uid_t" | "gid_t" | "clockid_t" => {
+          ty.to_token_stream()
+        }
+        "sockaddr" | "CString" | "PathBuf" | "timex" | "cap_user_header" | "cap_user_data" => {
+          quote!(Result<#ty, #crate_token::InspectError>)
+        }
         _ => {
           if ty.ident == "Option" {
             let PathArguments::AngleBracketed(arg) = &ty.arguments else {
@@ -286,6 +283,7 @@ fn wrap_syscall_arg_type(
             let arg = arg.args.to_token_stream().to_string();
             match arg.as_str() {
               "CString" => quote!(Result<Vec<CString>, #crate_token::InspectError>),
+              "u8" => quote!(Result<Vec<u8>, #crate_token::InspectError>),
               _ => panic!("Unsupported syscall arg type: {:?}", arg),
             }
           } else {

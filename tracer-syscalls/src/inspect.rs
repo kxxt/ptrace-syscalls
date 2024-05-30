@@ -8,12 +8,15 @@ use std::{
 
 use nix::{
   errno::Errno,
-  libc::{c_long, sockaddr},
+  libc::{c_long, sockaddr, timex},
   sys::ptrace::{self, AddressType},
   unistd::Pid,
 };
 
-use crate::arch::PtraceRegisters;
+use crate::{
+  arch::PtraceRegisters,
+  types::{cap_user_data, cap_user_header},
+};
 
 /// Inspect the registers captured by ptrace and return the inspection result.
 pub trait FromInspectingRegs {
@@ -124,6 +127,30 @@ impl InspectFromPid for Result<PathBuf, InspectError> {
 }
 
 impl InspectFromPid for Result<Option<PathBuf>, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+impl InspectFromPid for Result<Vec<u8>, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+impl InspectFromPid for Result<timex, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+impl InspectFromPid for Result<cap_user_data, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+impl InspectFromPid for Result<cap_user_header, InspectError> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
