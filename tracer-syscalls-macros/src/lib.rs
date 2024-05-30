@@ -88,11 +88,11 @@ impl Parse for Arch {
 struct GenSyscallArgsStructResult {
   args_struct: proc_macro2::TokenStream,
   raw_args_struct: proc_macro2::TokenStream,
-  modified_args_struct: Option<proc_macro2::TokenStream>,
+  modified_args_struct: proc_macro2::TokenStream,
   name: Ident,
   args_struct_type: Ident,
   raw_args_struct_type: Ident,
-  modified_args_struct_type: Option<Ident>,
+  modified_args_struct_type: Ident,
   archs: Vec<String>,
   syscall_number: Ident,
 }
@@ -177,6 +177,12 @@ fn gen_syscall_args_struct(
   let mut modified_arg_names = vec![];
   let mut modified_arg_types = vec![];
   let mut inspect_modified_args = vec![];
+  let syscall_result_type = &syscall.result;
+  modified_arg_names.push(format_ident!("syscall_result"));
+  modified_arg_types.push(quote! { #syscall_result_type });
+  inspect_modified_args.push(quote! {
+    let syscall_result = syscall_res_from_regs!(regs) as #syscall_result_type;
+  });
   if let Some(modified_args) = &syscall.modified_args {
     for modified_arg in modified_args.args.iter() {
       let i = syscall
@@ -269,7 +275,7 @@ fn gen_syscall_args_struct(
         }
       }
     },
-    modified_args_struct: (!modified_arg_names.is_empty()).then(|| quote! {
+    modified_args_struct: quote! {
       #[cfg(any(#(target_arch = #arch_names),*))]
       #[derive(Debug, Clone, PartialEq)]
       pub struct #camel_case_modified_args_type {
@@ -301,11 +307,11 @@ fn gen_syscall_args_struct(
           }
         }
       }
-    }),
+    },
     name: camel_case_ident,
     args_struct_type: camel_case_args_type,
     raw_args_struct_type: camel_case_raw_args_type,
-    modified_args_struct_type: Some(camel_case_modified_args_type).filter(|_| !modified_arg_names.is_empty()),
+    modified_args_struct_type: camel_case_modified_args_type,
     archs: arch_names.clone(),
   }
 }
@@ -320,9 +326,7 @@ pub fn gen_syscalls(input: TokenStream) -> TokenStream {
   let mut names = vec![];
   let mut raw_arg_struct_types = vec![];
   let mut arg_struct_types = vec![];
-  let mut modified_arg_struct_variants = vec![]; 
   let mut modified_arg_struct_types = vec![];
-  let mut modified_args_supported_archs = vec![];
   let mut supported_archs = vec![];
   let mut syscall_numbers = vec![];
   let crate_token = get_crate("tracer-syscalls");
@@ -340,14 +344,10 @@ pub fn gen_syscalls(input: TokenStream) -> TokenStream {
     } = gen_syscall_args_struct(syscall, crate_token.clone());
     arg_structs.push(args_struct);
     raw_arg_structs.push(raw_args_struct);
-    if modified_args_struct_type.is_some() {
-      modified_args_supported_archs.push(archs.clone());
-      modified_arg_struct_variants.push(name.clone());
-    }
-    modified_arg_structs.extend(modified_args_struct);
+    modified_arg_structs.push(modified_args_struct);
     arg_struct_types.push(args_struct_type);
     raw_arg_struct_types.push(raw_args_struct_type);
-    modified_arg_struct_types.extend(modified_args_struct_type);
+    modified_arg_struct_types.push(modified_args_struct_type);
     names.push(name);
     supported_archs.push(archs);
     syscall_numbers.push(syscall_number.clone());
@@ -380,8 +380,8 @@ pub fn gen_syscalls(input: TokenStream) -> TokenStream {
     #[derive(Debug, Clone, PartialEq)]
     pub enum SyscallModifiedArgs {
       #(
-        #[cfg(any(#(target_arch = #modified_args_supported_archs),*))]
-        #modified_arg_struct_variants(#modified_arg_struct_types),
+        #[cfg(any(#(target_arch = #supported_archs),*))]
+        #names(#modified_arg_struct_types),
       )*
       Unknown(#crate_token::UnknownArgs),
     }

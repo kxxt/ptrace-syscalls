@@ -7,15 +7,15 @@ use std::{
 };
 
 use nix::libc::{
-  c_char, c_uint, c_ulong, c_void, clockid_t, clone_args, epoll_event, gid_t, mode_t, off_t, pid_t,
-  sigset_t, size_t, sockaddr, socklen_t, ssize_t, timespec, timex, uid_t,
+  c_char, c_long, c_uint, c_ulong, c_void, clockid_t, clone_args, epoll_event, gid_t, mode_t,
+  off_t, pid_t, sigset_t, size_t, sockaddr, socklen_t, ssize_t, timespec, timex, uid_t,
 };
 use nix::sys::ptrace::AddressType;
 use nix::unistd::Pid;
 use tracer_syscalls_macros::gen_syscalls;
 
 use crate::{
-  arch::{syscall_arg, syscall_no_from_regs, PtraceRegisters},
+  arch::{syscall_arg, syscall_no_from_regs, syscall_res_from_regs, PtraceRegisters},
   types::*,
   FromInspectingRegs, InspectError, SyscallNumber,
 };
