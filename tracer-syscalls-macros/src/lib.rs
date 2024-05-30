@@ -108,7 +108,7 @@ fn gen_syscall_args_struct(
     // TODO: We shouldn't compare types as strings
     match arg_type.to_token_stream().to_string().as_str() {
       // Primitive types
-      "i32" | "i64" | "isize" | "i16" | "RawFd" | "socklen_t" => {
+      "i32" | "i64" | "isize" | "i16" | "RawFd" | "socklen_t" | "c_int" => {
         let inspect = quote! {
           let #arg_name = syscall_arg!(regs, #literal_i) as #wrapped_arg_type;
         };
@@ -128,7 +128,6 @@ fn gen_syscall_args_struct(
     syscall_number: syscall_const_name.clone(),
     args_struct: quote::quote! {
       #[cfg(any(#(target_arch = #arch_names),*))]
-      #[allow(non_upper_case_globals)]
       pub const #syscall_const_name: isize = #syscall_number;
 
       #[cfg(any(#(target_arch = #arch_names),*))]
@@ -255,6 +254,7 @@ fn wrap_syscall_arg_type(
     "i64" => quote!(i64),
     "isize" => quote!(isize),
     "i16" => quote!(i16),
+    "c_int" => quote!(c_int),
     "socklen_t" => quote!(socklen_t),
     "sockaddr" => quote!(Result<sockaddr, #crate_token::InspectError>),
     "RawFd" => quote!(RawFd),
