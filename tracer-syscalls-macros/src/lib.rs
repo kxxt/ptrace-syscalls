@@ -128,7 +128,8 @@ fn gen_syscall_args_struct(
   let mut inspects = vec![];
   let mut arg_names = vec![];
   let mut wrapped_arg_types = vec![];
-  for (i, arg) in args.iter().enumerate() {
+  for arg in args.iter() {
+    let i = syscall.raw_args.iter().position(|x| x.ident == arg.ident).unwrap();
     let arg_name = &arg.ident;
     arg_names.push(arg_name.clone().unwrap());
     let arg_type = &arg.ty;
