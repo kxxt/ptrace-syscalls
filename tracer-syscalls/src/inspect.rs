@@ -168,6 +168,18 @@ impl InspectFromPid for Result<i64, InspectError> {
   }
 }
 
+impl InspectFromPid for Result<u64, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+impl InspectFromPid for Result<AddressType, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
 impl InspectFromPid for Result<u32, InspectError> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()

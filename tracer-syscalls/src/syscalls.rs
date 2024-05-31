@@ -9,7 +9,7 @@ use std::{
 use nix::libc::{
   c_char, c_long, c_uint, c_ulong, c_void, clockid_t, clone_args, epoll_event, gid_t, mode_t,
   off_t, pid_t, sigset_t, size_t, sockaddr, socklen_t, ssize_t, timespec, timex, uid_t, stat,
-  statfs, timeval
+  statfs, timeval,
 };
 use nix::sys::ptrace::AddressType;
 use nix::unistd::Pid;
@@ -229,4 +229,9 @@ gen_syscalls! {
     -> c_long + { uaddr: Result<u32, InspectError> } for [x86_64: 454, aarch64: 454, riscv64: 454],
   futimesat(dirfd: RawFd, pathname: *const c_char, times: *const timeval) /
     { dirfd: RawFd, pathname: PathBuf, times: [timeval;2] } -> c_int for [x86_64: 261],
+  get_mempolicy(mode: *mut c_int, nodemask: *mut c_ulong, maxnode: c_ulong, addr: AddressType, flags: c_ulong) /
+    { maxnode: c_ulong, addr: AddressType, flags: c_ulong } -> c_long +
+    { mode: Result<Option<c_int>, InspectError>, nodemask: Option<Vec<c_ulong>> } for [x86_64: 239, aarch64: 236, riscv64: 236],
+  get_robust_list(pid: pid_t, head_ptr: *mut *mut robust_list_head, len_ptr: *mut size_t) /
+    { pid: pid_t, head_ptr: Result<AddressType, InspectError>, len_ptr: size_t } -> c_long for [x86_64: 274, aarch64: 100, riscv64: 100],
 }

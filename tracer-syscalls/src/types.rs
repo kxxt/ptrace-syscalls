@@ -2,7 +2,7 @@
 
 #![allow(non_camel_case_types)]
 
-use nix::libc::c_int;
+use nix::libc::{c_int, c_long};
 
 pub type key_serial_t = i32; // https://github.com/Distrotech/keyutils/blob/9d52b8ab86931fb5a66fa5b567ea01875f31016e/keyutils.h#L22
 
@@ -28,4 +28,18 @@ pub struct futex_waitv {
   uaddr: u64,
   flags: u32,
   __reserved: u32,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[repr(C)]
+pub struct robust_list {
+  next: *mut robust_list,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[repr(C)]
+pub struct robust_list_head {
+  list: robust_list,
+  futex_offset: c_long,
+  list_op_pending: *mut robust_list,
 }

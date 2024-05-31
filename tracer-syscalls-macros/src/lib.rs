@@ -156,7 +156,7 @@ fn gen_syscall_args_struct(
       inspects.push(inspect);
     } else {
       let inspect = quote! {
-        let #arg_name = #crate_token::InspectFromPid::inspect_from(pid, syscall_arg!(regs, #literal_i) as #crate_token::AddressType);
+        let #arg_name = #crate_token::InspectFromPid::inspect_from(inspectee_pid, syscall_arg!(regs, #literal_i) as #crate_token::AddressType);
       };
       inspects.push(inspect);
     }
@@ -208,7 +208,7 @@ fn gen_syscall_args_struct(
         inspect_modified_args.push(inspect);
       } else {
         let inspect = quote! {
-          let #arg_name = #crate_token::InspectFromPid::inspect_from(pid, syscall_arg!(regs, #literal_i) as #crate_token::AddressType);
+          let #arg_name = #crate_token::InspectFromPid::inspect_from(inspectee_pid, syscall_arg!(regs, #literal_i) as #crate_token::AddressType);
         };
         inspect_modified_args.push(inspect);
       }
@@ -226,7 +226,7 @@ fn gen_syscall_args_struct(
 
       #[cfg(any(#(target_arch = #arch_names),*))]
       impl #crate_token::FromInspectingRegs for #camel_case_raw_args_type {
-        fn from_inspecting_regs(pid: #crate_token::Pid, regs: &#crate_token::arch::PtraceRegisters) -> Self {
+        fn from_inspecting_regs(inspectee_pid: #crate_token::Pid, regs: &#crate_token::arch::PtraceRegisters) -> Self {
           use #crate_token::arch::syscall_arg;
           #(#inspect_raw_args)*
           Self {
@@ -270,7 +270,7 @@ fn gen_syscall_args_struct(
 
       #[cfg(any(#(target_arch = #arch_names),*))]
       impl #crate_token::FromInspectingRegs for #camel_case_args_type {
-        fn from_inspecting_regs(pid: #crate_token::Pid, regs: &#crate_token::arch::PtraceRegisters) -> Self {
+        fn from_inspecting_regs(inspectee_pid: #crate_token::Pid, regs: &#crate_token::arch::PtraceRegisters) -> Self {
           use #crate_token::arch::syscall_arg;
           #(#inspects)*
           Self {
@@ -303,7 +303,7 @@ fn gen_syscall_args_struct(
 
       #[cfg(any(#(target_arch = #arch_names),*))]
       impl #crate_token::FromInspectingRegs for #camel_case_modified_args_type {
-        fn from_inspecting_regs(pid: #crate_token::Pid, regs: &#crate_token::arch::PtraceRegisters) -> Self {
+        fn from_inspecting_regs(inspectee_pid: #crate_token::Pid, regs: &#crate_token::arch::PtraceRegisters) -> Self {
           use #crate_token::arch::syscall_arg;
           #(#inspect_modified_args)*
           Self {
@@ -415,16 +415,16 @@ pub fn gen_syscalls(input: TokenStream) -> TokenStream {
     }
 
     impl #crate_token::FromInspectingRegs for SyscallArgs {
-      fn from_inspecting_regs(pid: #crate_token::Pid, regs: &#crate_token::arch::PtraceRegisters) -> Self {
+      fn from_inspecting_regs(inspectee_pid: #crate_token::Pid, regs: &#crate_token::arch::PtraceRegisters) -> Self {
         use #crate_token::arch::syscall_no_from_regs;
         match syscall_no_from_regs!(regs) as isize {
           #(
             #syscall_numbers => {
-              Self::#names(#crate_token::FromInspectingRegs::from_inspecting_regs(pid, regs))
+              Self::#names(#crate_token::FromInspectingRegs::from_inspecting_regs(inspectee_pid, regs))
             },
           )*
           _ => {
-            Self::Unknown(#crate_token::FromInspectingRegs::from_inspecting_regs(pid, regs))
+            Self::Unknown(#crate_token::FromInspectingRegs::from_inspecting_regs(inspectee_pid, regs))
           }
         }
       }
@@ -477,7 +477,7 @@ fn wrap_syscall_arg_type(
       match ty_str.as_str() {
         "Unit" => (quote!(()), false),
         "RawFd" | "socklen_t" | "c_int" | "c_uint" | "c_ulong" | "i16" | "i32" | "i64" | "u64"
-        | "usize" | "isize" | "size_t" | "key_serial_t" | "AddressType" | "mode_t" | "uid_t"
+        | "usize" | "isize" | "size_t" | "key_serial_t" | "AddressType" | "mode_t" | "uid_t" | "pid_t"
         | "gid_t" | "off_t" | "u32" | "clockid_t" => (ty.to_token_stream(), false),
         "sockaddr" | "CString" | "PathBuf" | "timex" | "cap_user_header" | "cap_user_data"
         | "timespec" | "clone_args" | "epoll_event" | "sigset_t" | "stat" | "statfs" | "futex_waitv" => {
@@ -490,7 +490,7 @@ fn wrap_syscall_arg_type(
             };
             let arg = arg.args.to_token_stream().to_string();
             match arg.as_str() {
-              "PathBuf" | "timespec" | "Vec < CString >" | "CString" => {
+              "PathBuf" | "timespec" | "Vec < CString >" | "CString" | "Vec < c_ulong >"=> {
                 (quote!(Result<#ty, #crate_token::InspectError>), true)
               }
               _ => panic!("Unsupported inner syscall arg type: {:?}", arg),
@@ -501,7 +501,7 @@ fn wrap_syscall_arg_type(
             };
             let arg = arg.args.to_token_stream().to_string();
             match arg.as_str() {
-              "u8" | "CString" | "epoll_event" | "futex_waitv" => {
+              "u8" | "CString" | "epoll_event" | "futex_waitv" | "c_ulong" => {
                 (quote!(Result<#ty, #crate_token::InspectError>), true)
               }
               _ => panic!("Unsupported inner syscall arg type: {:?}", arg),
