@@ -480,7 +480,7 @@ fn wrap_syscall_arg_type(
         | "usize" | "isize" | "size_t" | "key_serial_t" | "AddressType" | "mode_t" | "uid_t" | "pid_t"
         | "gid_t" | "off_t" | "u32" | "clockid_t" => (ty.to_token_stream(), false),
         "sockaddr" | "CString" | "PathBuf" | "timex" | "cap_user_header" | "cap_user_data"
-        | "timespec" | "clone_args" | "epoll_event" | "sigset_t" | "stat" | "statfs" | "futex_waitv" => {
+        | "timespec" | "clone_args" | "epoll_event" | "sigset_t" | "stat" | "statfs" | "futex_waitv" | "user_desc" => {
           (quote!(Result<#ty, #crate_token::InspectError>), true)
         }
         _ => {
@@ -501,7 +501,7 @@ fn wrap_syscall_arg_type(
             };
             let arg = arg.args.to_token_stream().to_string();
             match arg.as_str() {
-              "u8" | "CString" | "epoll_event" | "futex_waitv" | "c_ulong" => {
+              "u8" | "CString" | "epoll_event" | "futex_waitv" | "c_ulong" | "linux_dirent" | "linux_dirent64"=> {
                 (quote!(Result<#ty, #crate_token::InspectError>), true)
               }
               _ => panic!("Unsupported inner syscall arg type: {:?}", arg),

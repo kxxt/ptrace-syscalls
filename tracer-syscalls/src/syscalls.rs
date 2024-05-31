@@ -9,7 +9,7 @@ use std::{
 use nix::libc::{
   c_char, c_long, c_uint, c_ulong, c_void, clockid_t, clone_args, epoll_event, gid_t, mode_t,
   off_t, pid_t, sigset_t, size_t, sockaddr, socklen_t, ssize_t, timespec, timex, uid_t, stat,
-  statfs, timeval,
+  statfs, timeval
 };
 use nix::sys::ptrace::AddressType;
 use nix::unistd::Pid;
@@ -229,9 +229,16 @@ gen_syscalls! {
     -> c_long + { uaddr: Result<u32, InspectError> } for [x86_64: 454, aarch64: 454, riscv64: 454],
   futimesat(dirfd: RawFd, pathname: *const c_char, times: *const timeval) /
     { dirfd: RawFd, pathname: PathBuf, times: [timeval;2] } -> c_int for [x86_64: 261],
+  // get_mempolicy: nodemask: [c_ulong; (maxnode + ULONG_WIDTH - 1) / ULONG_WIDTH]
   get_mempolicy(mode: *mut c_int, nodemask: *mut c_ulong, maxnode: c_ulong, addr: AddressType, flags: c_ulong) /
     { maxnode: c_ulong, addr: AddressType, flags: c_ulong } -> c_long +
     { mode: Result<Option<c_int>, InspectError>, nodemask: Option<Vec<c_ulong>> } for [x86_64: 239, aarch64: 236, riscv64: 236],
   get_robust_list(pid: pid_t, head_ptr: *mut *mut robust_list_head, len_ptr: *mut size_t) /
     { pid: pid_t, head_ptr: Result<AddressType, InspectError>, len_ptr: size_t } -> c_long for [x86_64: 274, aarch64: 100, riscv64: 100],
+  get_thread_area(u_info: *mut user_desc) / { u_info: user_desc } -> c_int + { u_info: user_desc } for [x86_64: 211],
+  getcpu(cpu: *mut c_uint, node: *mut c_uint) /
+    { cpu: Result<Option<c_uint>, InspectError>, node: Result<Option<c_uint>, InspectError> } -> c_int for [x86_64: 309, aarch64: 168, riscv64: 168],
+  getcwd(buf: *mut c_char, size: size_t) / { size: size_t } -> c_long + { buf: CString } for [x86_64: 79, aarch64: 17, riscv64: 17],
+  getdents(fd: RawFd, dirp: *mut linux_dirent, count: c_uint) / { fd: RawFd, count: c_uint } -> c_int + { dirp: Vec<linux_dirent> } for [x86_64: 78],
+  getdents64(fd: RawFd, dirp: *mut linux_dirent64, count: c_uint) / { fd: RawFd, count: c_uint } -> c_int + { dirp: Vec<linux_dirent64> } for [x86_64: 217, aarch64: 61, riscv64: 61],
 }

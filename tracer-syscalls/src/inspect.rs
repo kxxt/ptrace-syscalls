@@ -15,7 +15,7 @@ use nix::{
 
 use crate::{
   arch::PtraceRegisters,
-  types::{cap_user_data, cap_user_header, futex_waitv},
+  types::{cap_user_data, cap_user_header, futex_waitv, linux_dirent, linux_dirent64},
 };
 
 /// Inspect the registers captured by ptrace and return the inspection result.
@@ -211,6 +211,26 @@ impl InspectFromPid for Result<statfs, InspectError> {
 }
 
 impl InspectFromPid for Result<futex_waitv, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+
+impl InspectFromPid for Result<linux_dirent, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+impl InspectFromPid for Result<linux_dirent64, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+#[cfg(target_arch = "x86_64")]
+impl InspectFromPid for Result<crate::types::user_desc, InspectError> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }

@@ -2,7 +2,7 @@
 
 #![allow(non_camel_case_types)]
 
-use nix::libc::{c_int, c_long};
+use nix::libc::{c_char, c_int, c_long, c_uint, c_ulong, c_ushort, ino64_t, off64_t, off_t};
 
 pub type key_serial_t = i32; // https://github.com/Distrotech/keyutils/blob/9d52b8ab86931fb5a66fa5b567ea01875f31016e/keyutils.h#L22
 
@@ -42,4 +42,33 @@ pub struct robust_list_head {
   list: robust_list,
   futex_offset: c_long,
   list_op_pending: *mut robust_list,
+}
+
+#[cfg(target_arch = "x86_64")]
+#[derive(Debug, Clone, PartialEq)]
+#[repr(C)]
+pub struct user_desc {
+  entry_number: c_uint,
+  base_addr: c_uint,
+  limit: c_uint,
+  bitflags: c_uint,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[repr(C)]
+pub struct linux_dirent {
+  d_ino: c_ulong,
+  d_off: off_t,
+  d_reclen: c_ushort,
+  d_name: *mut c_char,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[repr(C)]
+pub struct linux_dirent64 {
+  d_ino: ino64_t,
+  d_off: off64_t,
+  d_reclen: c_ushort,
+  d_type: c_char,
+  d_name: *mut c_char,
 }
