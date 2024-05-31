@@ -8,14 +8,14 @@ use std::{
 
 use nix::{
   errno::Errno,
-  libc::{c_long, clone_args, epoll_event, sigset_t, sockaddr, timespec, timex},
+  libc::{c_long, clone_args, epoll_event, sigset_t, sockaddr, stat, statfs, timespec, timeval, timex},
   sys::ptrace::{self, AddressType},
   unistd::Pid,
 };
 
 use crate::{
   arch::PtraceRegisters,
-  types::{cap_user_data, cap_user_header},
+  types::{cap_user_data, cap_user_header, futex_waitv},
 };
 
 /// Inspect the registers captured by ptrace and return the inspection result.
@@ -186,7 +186,40 @@ impl InspectFromPid for Result<epoll_event, InspectError> {
   }
 }
 
+impl InspectFromPid for Result<stat, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+impl InspectFromPid for Result<statfs, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+impl InspectFromPid for Result<futex_waitv, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+impl InspectFromPid for Result<timeval, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
 impl<T> InspectFromPid for Result<Vec<T>, InspectError>
+where
+  Result<T, InspectError>: InspectFromPid,
+{
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+impl<T> InspectFromPid for Result<[T; 2], InspectError>
 where
   Result<T, InspectError>: InspectFromPid,
 {

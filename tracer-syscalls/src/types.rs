@@ -20,3 +20,12 @@ pub struct cap_user_data {
   permitted: u32,
   inheritable: u32,
 }
+
+#[derive(Debug, Clone, PartialEq)]
+#[repr(C)]
+pub struct futex_waitv {
+  val: u64,
+  uaddr: u64,
+  flags: u32,
+  __reserved: u32,
+}

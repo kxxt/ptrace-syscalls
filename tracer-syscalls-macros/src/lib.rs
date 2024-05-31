@@ -467,17 +467,20 @@ fn wrap_syscall_arg_type(
   crate_token: proc_macro2::TokenStream,
 ) -> (proc_macro2::TokenStream, bool) {
   match ty {
+    Type::Array(ty) => {
+      (quote!(Result<#ty, #crate_token::InspectError>), true)
+    },
     Type::Path(ty) => {
       assert_eq!(ty.path.segments.len(), 1);
       let ty = &ty.path.segments[0];
       let ty_str = ty.to_token_stream().to_string();
       match ty_str.as_str() {
         "Unit" => (quote!(()), false),
-        "RawFd" | "socklen_t" | "c_int" | "c_uint" | "c_ulong" | "i16" | "i32" | "i64" | "u64" | "usize"
-        | "isize" | "size_t" | "key_serial_t" | "AddressType" | "mode_t" | "uid_t" | "gid_t" | "off_t"
-        | "clockid_t" => (ty.to_token_stream(), false),
+        "RawFd" | "socklen_t" | "c_int" | "c_uint" | "c_ulong" | "i16" | "i32" | "i64" | "u64"
+        | "usize" | "isize" | "size_t" | "key_serial_t" | "AddressType" | "mode_t" | "uid_t"
+        | "gid_t" | "off_t" | "u32" | "clockid_t" => (ty.to_token_stream(), false),
         "sockaddr" | "CString" | "PathBuf" | "timex" | "cap_user_header" | "cap_user_data"
-        | "timespec" | "clone_args" | "epoll_event" | "sigset_t" => {
+        | "timespec" | "clone_args" | "epoll_event" | "sigset_t" | "stat" | "statfs" | "futex_waitv" => {
           (quote!(Result<#ty, #crate_token::InspectError>), true)
         }
         _ => {
@@ -487,7 +490,7 @@ fn wrap_syscall_arg_type(
             };
             let arg = arg.args.to_token_stream().to_string();
             match arg.as_str() {
-              "PathBuf" | "timespec" | "Vec < CString >" | "CString"=> {
+              "PathBuf" | "timespec" | "Vec < CString >" | "CString" => {
                 (quote!(Result<#ty, #crate_token::InspectError>), true)
               }
               _ => panic!("Unsupported inner syscall arg type: {:?}", arg),
@@ -498,7 +501,7 @@ fn wrap_syscall_arg_type(
             };
             let arg = arg.args.to_token_stream().to_string();
             match arg.as_str() {
-              "u8" | "CString" | "epoll_event" => {
+              "u8" | "CString" | "epoll_event" | "futex_waitv" => {
                 (quote!(Result<#ty, #crate_token::InspectError>), true)
               }
               _ => panic!("Unsupported inner syscall arg type: {:?}", arg),

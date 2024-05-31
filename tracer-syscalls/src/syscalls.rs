@@ -8,7 +8,8 @@ use std::{
 
 use nix::libc::{
   c_char, c_long, c_uint, c_ulong, c_void, clockid_t, clone_args, epoll_event, gid_t, mode_t,
-  off_t, pid_t, sigset_t, size_t, sockaddr, socklen_t, ssize_t, timespec, timex, uid_t,
+  off_t, pid_t, sigset_t, size_t, sockaddr, socklen_t, ssize_t, timespec, timex, uid_t, stat,
+  statfs, timeval
 };
 use nix::sys::ptrace::AddressType;
 use nix::unistd::Pid;
@@ -200,4 +201,32 @@ gen_syscalls! {
     { fd: RawFd, flags: c_uint, ms_flags: c_uint } -> c_int for [x86_64: 432, aarch64: 432, riscv64: 432],
   fsopen(fsname: *const c_char, flags: c_uint) / { fsname: CString, flags: c_uint } -> c_int for [x86_64: 430, aarch64: 430, riscv64: 430],
   fspick(dirfd: RawFd, pathname: *const c_char, flags: c_uint) / { dirfd: RawFd, pathname: CString, flags: c_uint } -> c_int for [x86_64: 433, aarch64: 433, riscv64: 433],
+  fstat(fd: RawFd, statbuf: *mut stat) / { fd: RawFd } -> c_int + { statbuf: stat } for [x86_64: 5, aarch64: 80, riscv64: 80],
+  // fstat64, fstatat64
+  fstatfs(fd: RawFd, buf: *mut statfs) / { fd: RawFd } -> c_int + { buf: statfs } for [x86_64: 138, aarch64: 44, riscv64: 44],
+  // fstatfs64
+  fsync(fd: RawFd) / { fd: RawFd } -> c_int for [x86_64: 74, aarch64: 82, riscv64: 82],
+  ftruncate(fd: RawFd, length: off_t) / { fd: RawFd, length: off_t } -> c_int for [x86_64: 77, aarch64: 46, riscv64: 46],
+  // ftruncate64
+  // futex: val2 can be a pointer to timespec or a u32 value. val2, uaddr2 and val3 is optional for some ops. TODO: design a better rust interface
+  futex(uaddr: *mut u32, futex_op: c_int, val: u32, val2: usize, uaddr2: *mut u32, val3: u32) /
+    { uaddr: Result<u32, InspectError>, futex_op: c_int, val: u32, val2: usize, uaddr2: Result<u32, InspectError>, val3: u32 }
+    -> c_long + { uaddr: Result<u32, InspectError>, uaddr2: Result<u32, InspectError> } for [x86_64: 202, aarch64: 98, riscv64: 98],
+  // https://elixir.bootlin.com/linux/v6.9.3/source/include/linux/syscalls.h#L568
+  // futex_requeue: waiters is always a two-element array of futex_waitv. TODO: design a better rust interface
+  futex_requeue(waiters: *mut futex_waitv, flags: c_uint, nr_wake: c_int, nr_requeue: c_int) /
+    { waiters: Vec<futex_waitv>, flags: c_uint, nr_wake: c_int, nr_requeue: c_int }
+    -> c_long + { waiters: Vec<futex_waitv> } for [x86_64: 456, aarch64: 456, riscv64: 456],
+  // futex_time64
+  futex_wait(uaddr: *mut u32, val: c_ulong, mask: c_ulong, flags: c_uint, timespec: *mut timespec, clockid: clockid_t) /
+    { uaddr: Result<u32, InspectError>, val: c_ulong, mask: c_ulong, flags: c_uint, timespec: timespec, clockid: clockid_t }
+    -> c_long + { uaddr: Result<u32, InspectError> } for [x86_64: 455, aarch64: 455, riscv64: 455],
+  futex_waitv(waiters: *mut futex_waitv, nr_futexes: c_uint, flags: c_uint, timeout: *mut timespec, clockid: clockid_t) /
+    { waiters: Vec<futex_waitv>, nr_futexes: c_uint, flags: c_uint, timeout: timespec, clockid: clockid_t }
+    -> c_long + { waiters: Vec<futex_waitv> } for [x86_64: 449, aarch64: 449, riscv64: 449],
+  futex_wake(uaddr: *mut u32, mask: c_ulong, nr: c_int, flags: c_uint) /
+    { uaddr: Result<u32, InspectError>, mask: c_ulong, nr: c_int, flags: c_uint }
+    -> c_long + { uaddr: Result<u32, InspectError> } for [x86_64: 454, aarch64: 454, riscv64: 454],
+  futimesat(dirfd: RawFd, pathname: *const c_char, times: *const timeval) /
+    { dirfd: RawFd, pathname: PathBuf, times: [timeval;2] } -> c_int for [x86_64: 261],
 }
