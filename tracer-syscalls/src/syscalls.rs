@@ -9,7 +9,7 @@ use std::{
 use nix::libc::{
   c_char, c_long, c_uint, c_ulong, c_void, clockid_t, clone_args, epoll_event, gid_t, mode_t,
   off_t, pid_t, sigset_t, size_t, sockaddr, socklen_t, ssize_t, timespec, timex, uid_t, stat,
-  statfs, timeval
+  statfs, timeval, itimerval, itimerspec, id_t, rlimit, rusage
 };
 use nix::sys::ptrace::AddressType;
 use nix::unistd::Pid;
@@ -54,10 +54,10 @@ gen_syscalls! {
   // _llseek (32bit)
   // _newselect
   accept(socketfd: c_int, addr: *mut sockaddr, addrlen: *mut socklen_t) /
-    { socketfd: RawFd, addr: sockaddr, addrlen: socklen_t } -> c_int + { addr: sockaddr, addrlen: Result<socklen_t, InspectError> }
+    { socketfd: RawFd, addr: sockaddr, addrlen: Result<socklen_t, InspectError> } -> c_int + { addr: sockaddr, addrlen: Result<socklen_t, InspectError> }
     for [x86_64: 43, aarch64: 202, riscv64: 202],
   accept4(socketfd: RawFd, addr: *mut sockaddr, addrlen: *mut socklen_t, flags: c_int) /
-    { socketfd: RawFd, addr: sockaddr, addrlen: socklen_t, flags: c_int } -> c_int + { addr: sockaddr, addrlen: Result<socklen_t, InspectError> }
+    { socketfd: RawFd, addr: sockaddr, addrlen: Result<socklen_t, InspectError>, flags: c_int } -> c_int + { addr: sockaddr, addrlen: Result<socklen_t, InspectError> }
     for [x86_64: 288, aarch64: 242, riscv64: 242],
   access(pathname: *const c_char, mode: c_int) / { pathname: PathBuf, mode: c_int } -> c_int for [x86_64: 21],
   acct(filename: *const c_char) / { filename: Option<PathBuf> } -> c_int for [x86_64: 163, aarch64: 89, riscv64: 89],
@@ -241,4 +241,48 @@ gen_syscalls! {
   getcwd(buf: *mut c_char, size: size_t) / { size: size_t } -> c_long + { buf: CString } for [x86_64: 79, aarch64: 17, riscv64: 17],
   getdents(fd: RawFd, dirp: *mut linux_dirent, count: c_uint) / { fd: RawFd, count: c_uint } -> c_int + { dirp: Vec<linux_dirent> } for [x86_64: 78],
   getdents64(fd: RawFd, dirp: *mut linux_dirent64, count: c_uint) / { fd: RawFd, count: c_uint } -> c_int + { dirp: Vec<linux_dirent64> } for [x86_64: 217, aarch64: 61, riscv64: 61],
+  // getdomainname
+  // getdtablesize
+  getegid() / {} -> gid_t for [x86_64: 108, aarch64: 177, riscv64: 177],
+  // getegid32
+  geteuid() / {} -> uid_t for [x86_64: 107, aarch64: 175, riscv64: 175],
+  // geteuid32
+  getgid() / {} -> gid_t for [x86_64: 104, aarch64: 176, riscv64: 176],
+  // getgid32
+  getgroups(size: c_int, list: *mut gid_t) / { size: c_int } -> c_int + { list: Vec<gid_t> } for [x86_64: 115, aarch64: 158, riscv64: 158],
+  // getgroups32
+  // gethostname
+  getitimer(which: c_int, value: *mut itimerval) / { which: c_int } -> c_int + { value: itimerval } for [x86_64: 36, aarch64: 102, riscv64: 102],
+  // getpagesize
+  getpeername(sockfd: RawFd, addr: *mut sockaddr, addrlen: *mut socklen_t) /
+    { sockfd: RawFd, addr: sockaddr, addrlen: Result<socklen_t, InspectError> } -> c_int + { addr: sockaddr, addrlen: Result<socklen_t, InspectError> } for [x86_64: 52, aarch64: 205, riscv64: 205],
+  getpgid(pid: pid_t) / { pid: pid_t } -> pid_t for [x86_64: 121, aarch64: 155, riscv64: 155],
+  getpgrp() / {} -> pid_t for [x86_64: 111],
+  getpid() / {} -> pid_t for [x86_64: 39, aarch64: 172, riscv64: 172],
+  getppid() / {} -> pid_t for [x86_64: 110, aarch64: 173, riscv64: 173],
+  getpriority(which: c_int, who: id_t) / { which: c_int, who: id_t } -> c_int for [x86_64: 140, aarch64: 141, riscv64: 141],
+  getrandom(buf: *mut c_void, buflen: size_t, flags: c_uint) / { buflen: size_t, flags: c_uint } -> ssize_t + { buf: Vec<u8> } for [x86_64: 318, aarch64: 278, riscv64: 278],
+  getresgid(rgid: *mut gid_t, egid: *mut gid_t, sgid: *mut gid_t) / {}
+    -> c_int + { rgid: Result<gid_t, InspectError>, egid: Result<gid_t, InspectError>, sgid: Result<gid_t, InspectError> } for [x86_64: 120, aarch64: 150, riscv64: 150],
+  // getresgid32
+  getresuid(ruid: *mut uid_t, euid: *mut uid_t, suid: *mut uid_t) / {}
+    -> c_int + { ruid: Result<uid_t, InspectError>, euid: Result<uid_t, InspectError>, suid: Result<uid_t, InspectError> } for [x86_64: 118, aarch64: 148, riscv64: 148],
+  // getresuid32
+  getrlimit(resource: c_int, rlim: *mut rlimit) / { resource: c_int } -> c_int + { rlim: rlimit } for [x86_64: 97, aarch64: 163, riscv64: 163],
+  getrusage(who: c_int, usage: *mut rusage) / { who: c_int } -> c_int + { usage: rusage } for [x86_64: 98, aarch64: 165, riscv64: 165],
+  getsid(pid: pid_t) / { pid: pid_t } -> pid_t for [x86_64: 124, aarch64: 156, riscv64: 156],
+  getsockname(sockfd: RawFd, addr: *mut sockaddr, addrlen: *mut socklen_t) /
+    { sockfd: RawFd, addrlen: Result<socklen_t, InspectError> } -> c_int + { addr: sockaddr, addrlen: Result<socklen_t, InspectError> } for [x86_64: 51, aarch64: 204, riscv64: 204],
+  getsockopt(sockfd: RawFd, level: c_int, optname: c_int, optval: *mut c_void, optlen: *mut socklen_t) /
+    { sockfd: RawFd, level: c_int, optname: c_int, optlen: Result<socklen_t, InspectError> }
+    -> c_int + { optval: Vec<u8>, optlen: Result<socklen_t, InspectError> } for [x86_64: 55, aarch64: 209, riscv64: 209],
+  gettid() / {} -> pid_t for [x86_64: 186, aarch64: 178, riscv64: 178],
+  gettimeofday(tv: *mut timeval, tz: *mut timezone) / {} -> c_int + { tv: timeval, tz: Option<timezone> } for [x86_64: 96, aarch64: 169, riscv64: 169],
+  getuid() / {} -> uid_t for [x86_64: 102, aarch64: 174, riscv64: 174],
+  // getuid32
+  getxattr(pathname: *const c_char, name: *const c_char, value: *mut c_void, size: size_t) /
+    { pathname: PathBuf, name: CString, size: size_t } -> ssize_t + { value: Vec<u8> } for [x86_64: 191, aarch64: 8, riscv64: 8],
+  // getxgid
+  // getxpid
+  // getxuid
 }

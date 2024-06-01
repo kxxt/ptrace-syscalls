@@ -72,3 +72,10 @@ pub struct linux_dirent64 {
   d_type: c_char,
   d_name: *mut c_char,
 }
+
+#[derive(Debug, Clone, PartialEq)]
+#[repr(C)]
+pub struct timezone {
+  tz_minuteswest: c_int,
+  tz_dsttime: c_int,
+}
