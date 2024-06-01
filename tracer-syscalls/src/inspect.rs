@@ -8,14 +8,19 @@ use std::{
 
 use nix::{
   errno::Errno,
-  libc::{c_long, clone_args, epoll_event, iocb, itimerval, rlimit, rusage, sigset_t, sockaddr, stat, statfs, timespec, timeval, timex},
+  libc::{
+    c_long, clone_args, epoll_event, iocb, itimerval, rlimit, rusage, sigset_t, sockaddr, stat,
+    statfs, timespec, timeval, timex,
+  },
   sys::ptrace::{self, AddressType},
   unistd::Pid,
 };
 
 use crate::{
   arch::PtraceRegisters,
-  types::{__aio_sigset, cap_user_data, cap_user_header, futex_waitv, io_event, io_uring_params, kexec_segment, linux_dirent, linux_dirent64, timezone},
+  types::{
+    __aio_sigset, __mount_arg, cap_user_data, cap_user_header, futex_waitv, io_event, io_uring_params, kexec_segment, landlock_ruleset_attr, linux_dirent, linux_dirent64, timezone
+  },
 };
 
 /// Inspect the registers captured by ptrace and return the inspection result.
@@ -240,7 +245,6 @@ impl InspectFromPid for Result<io_uring_params, InspectError> {
   }
 }
 
-
 impl InspectFromPid for Result<io_event, InspectError> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
@@ -282,6 +286,28 @@ impl InspectFromPid for Result<linux_dirent64, InspectError> {
     todo!()
   }
 }
+
+impl InspectFromPid for Result<landlock_ruleset_attr, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+impl InspectFromPid for Result<__mount_arg, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+
+// impl<T> InspectFromPid for Result<T, InspectError>
+// where
+//   T: Sized,
+// {
+//   fn inspect_from(pid: Pid, address: AddressType) -> Self {
+//     todo!()
+//   }
+// }
 
 #[cfg(target_arch = "x86_64")]
 impl InspectFromPid for Result<crate::types::user_desc, InspectError> {

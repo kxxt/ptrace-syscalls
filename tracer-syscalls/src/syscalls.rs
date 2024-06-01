@@ -6,20 +6,19 @@ use std::{
   os::fd::RawFd,
 };
 
-use nix::libc::{
-  c_char, c_long, c_uint, c_ulong, c_void, clockid_t, clone_args, epoll_event, gid_t, id_t, iocb,
-  itimerspec, itimerval, mode_t, off_t, pid_t, rlimit, rusage, sigset_t, size_t, sockaddr,
-  socklen_t, ssize_t, stat, statfs, timespec, timeval, timex, uid_t,
-};
-use nix::sys::ptrace::AddressType;
-use nix::unistd::Pid;
-use tracer_syscalls_macros::gen_syscalls;
-
 use crate::{
   arch::{syscall_arg, syscall_no_from_regs, syscall_res_from_regs, PtraceRegisters},
   types::*,
   FromInspectingRegs, InspectError, SyscallNumber,
 };
+use nix::libc::{
+  c_char, c_long, c_uint, c_ulong, c_void, clockid_t, clone_args, epoll_event, gid_t, id_t, iocb,
+  itimerspec, itimerval, mode_t, off_t, pid_t, rlimit, rusage, sigset_t, size_t, sockaddr,
+  socklen_t, ssize_t, stat, statfs, timespec, timeval, timex, uid_t, 
+};
+use nix::sys::ptrace::AddressType;
+use nix::unistd::Pid;
+use tracer_syscalls_macros::gen_syscalls;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct UnknownArgs {
@@ -187,7 +186,7 @@ gen_syscalls! {
   finit_module(fd: RawFd, param_values: *const c_char, flags: c_int) /
     { fd: RawFd, param_values: CString, flags: c_int } -> c_int for [x86_64: 313, aarch64: 273, riscv64: 273],
   flistxattr(fd: RawFd, list: *mut c_char, size: size_t) /
-    { fd: RawFd, list: Option<CString>, size: size_t } -> ssize_t for [x86_64: 194, aarch64: 11, riscv64: 11],
+    { fd: RawFd, list: Option<CString>, size: size_t } -> ssize_t for [x86_64: 196, aarch64: 13, riscv64: 13],
   flock(fd: RawFd, operation: c_int) / { fd: RawFd, operation: c_int } -> c_int for [x86_64: 73, aarch64: 32, riscv64: 32],
   fork() / {} -> pid_t for [x86_64: 57],
   fremovexattr(fd: RawFd, name: *const c_char) / { fd: RawFd, name: CString } -> c_int for [x86_64: 196, aarch64: 16, riscv64: 16],
@@ -333,4 +332,41 @@ gen_syscalls! {
   keyctl(option: c_int, arg2: c_ulong, arg3: c_ulong, arg4: c_ulong, arg5: c_ulong) /
     { option: c_int, arg2: c_ulong, arg3: c_ulong, arg4: c_ulong, arg5: c_ulong } -> c_long for [x86_64: 250, aarch64: 219, riscv64: 219],
   kill(pid: pid_t, sig: c_int) / { pid: pid_t, sig: c_int } -> c_int for [x86_64: 62, aarch64: 129, riscv64: 129],
+  // TODO: rule_type and rule_attr forms a sum type.
+  landlock_add_rule(ruleset_fd: RawFd, rule_type: c_long, rule_attr: *const c_void, flags: u32) /
+    { ruleset_fd: RawFd, rule_type: c_long, rule_attr: Vec<u8>, flags: u32 } -> c_int for [x86_64: 445, aarch64: 445, riscv64: 445],
+  landlock_create_ruleset(ruleset_attr: *const landlock_ruleset_attr, size: size_t, flags: u32) /
+    { ruleset_attr: landlock_ruleset_attr, size: size_t, flags: u32 } -> c_int for [x86_64: 444, aarch64: 444, riscv64: 444],
+  landlock_restrict_self(ruleset_fd: RawFd, flags: u32) / { ruleset_fd: RawFd, flags: u32 } -> c_int for [x86_64: 446, aarch64: 446, riscv64: 446],
+  lchown(pathname: *const c_char, owner: uid_t, group: gid_t) / { pathname: PathBuf, owner: uid_t, group: gid_t } -> c_int for [x86_64: 94],
+  // lchown32
+  lgetxattr(pathname: *const c_char, name: *const c_char, value: *mut c_void, size: size_t) /
+  { pathname: PathBuf, name: CString, size: size_t } -> ssize_t + { value: Vec<u8> } for [x86_64: 192, aarch64: 9, riscv64: 9],
+  link(oldpath: *const c_char, newpath: *const c_char) / { oldpath: PathBuf, newpath: PathBuf } -> c_int for [x86_64: 86],
+  linkat(olddirfd: RawFd, oldpath: *const c_char, newdirfd: RawFd, newpath: *const c_char, flags: c_int) /
+    { olddirfd: RawFd, oldpath: PathBuf, newdirfd: RawFd, newpath: PathBuf, flags: c_int } -> c_int for [x86_64: 265, aarch64: 37, riscv64: 37],
+  listen(sockfd: RawFd, backlog: c_int) / { sockfd: RawFd, backlog: c_int } -> c_int for [x86_64: 50, aarch64: 201, riscv64: 201],
+  // listmount: https://lwn.net/Articles/950569/
+  listmount(req: *const __mount_arg, buf: *mut u64, bufsize: size_t, flags: c_uint) /
+    { req: __mount_arg, bufsize: size_t, flags: c_uint } -> c_int + { buf: Vec<u64> } for [x86_64: 458, aarch64: 458, riscv64: 458],
+  listxattr(path: *const c_char, list: *mut c_char, size: size_t) /
+    { path: PathBuf, size: size_t } -> ssize_t + { list: Option<Vec<CString>> } for [x86_64: 194, aarch64: 11, riscv64: 11],
+  llistxattr(path: *const c_char, list: *mut c_char, size: size_t) /
+    { path: PathBuf, size: size_t } -> ssize_t + { list: Option<Vec<CString>> } for [x86_64: 195, aarch64: 12, riscv64: 12],
+  lookup_dcookie(cookie: u64, buffer: *mut c_char, len: size_t) /
+    { cookie: u64, len: size_t } -> c_long + { buffer: PathBuf } for [x86_64: 212, aarch64: 18, riscv64: 18],
+  lremovexattr(path: *const c_char, name: *const c_char) / { path: PathBuf, name: CString } -> c_int for [x86_64: 198, aarch64: 15, riscv64: 15],
+  lseek(fd: RawFd, offset: off_t, whence: c_int) / { fd: RawFd, offset: off_t, whence: c_int } -> off_t for [x86_64: 8, aarch64: 62, riscv64: 62],
+  lsetxattr(path: *const c_char, name: *const c_char, value: *const c_void, size: size_t, flags: c_int) /
+    { path: PathBuf, name: CString, value: CString, size: size_t, flags: c_int } -> c_int for [x86_64: 189, aarch64: 6, riscv64: 6],
+  // lsm: https://lwn.net/Articles/919545/
+  // TODO: how to deal with DST arrays?
+  lsm_get_self_attr(attr: c_uint, ctx: *mut c_void, size: *mut u32, flags: u32) / { attr: c_uint, size: Result<u32, InspectError>, flags: u32 }
+    -> c_int + { ctx: Vec<u8> } for [x86_64: 459, aarch64: 459, riscv64: 459],
+  lsm_list_modules(ids: *mut u64, size: *mut u32, flags: u32) / { size: Result<u32, InspectError>, flags: u32 }
+    -> c_int + { ids: Vec<u64> } for [x86_64: 461, aarch64: 461, riscv64: 461],
+  lsm_set_self_attr(attr: c_uint, ctx: *const c_void, size: u32, flags: u32) /
+    { attr: c_uint, ctx: Vec<u8>, size: u32, flags: u32 } -> c_int for [x86_64: 460, aarch64: 460, riscv64: 460],
+  lstat(pathname: *const c_char, statbuf: *mut stat) / { pathname: PathBuf } -> c_int + { statbuf: stat } for [x86_64: 6],
+  // lstat64
 }

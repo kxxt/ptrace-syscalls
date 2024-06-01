@@ -481,7 +481,7 @@ fn wrap_syscall_arg_type(
         "sockaddr" | "CString" | "PathBuf" | "timex" | "cap_user_header" | "cap_user_data"
         | "timespec" | "clone_args" | "epoll_event" | "sigset_t" | "stat" | "statfs"
         | "futex_waitv" | "user_desc" | "itimerval" | "rlimit" | "rusage" | "timeval" | "__aio_sigset"
-        | "timezone" | "iocb" | "io_event" | "io_uring_params" => {
+        | "timezone" | "iocb" | "io_event" | "io_uring_params" | "landlock_ruleset_attr" | "__mount_arg" => {
           (quote!(Result<#ty, #crate_token::InspectError>), true)
         }
         _ => {
@@ -502,7 +502,7 @@ fn wrap_syscall_arg_type(
             let arg = arg.args.to_token_stream().to_string();
             match arg.as_str() {
               "u8" | "CString" | "epoll_event" | "futex_waitv" | "c_ulong" | "linux_dirent"
-              | "io_event" | "linux_dirent64" | "gid_t" | "AddressType" | "kexec_segment" => {
+              | "io_event" | "linux_dirent64" | "gid_t" | "AddressType" | "kexec_segment" | "u64" => {
                 (quote!(Result<#ty, #crate_token::InspectError>), true)
               }
               _ => panic!("Unsupported inner syscall arg type: {:?}", arg),
