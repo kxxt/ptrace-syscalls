@@ -474,14 +474,14 @@ fn wrap_syscall_arg_type(
       let ty_str = ty.to_token_stream().to_string();
       match ty_str.as_str() {
         "Unit" => (quote!(()), false),
-        "RawFd" | "socklen_t" | "c_int" | "c_uint" | "c_ulong" | "i16" | "i32" | "i64" | "u64"
-        | "usize" | "isize" | "size_t" | "key_serial_t" | "AddressType" | "mode_t" | "uid_t"
-        | "pid_t" | "gid_t" | "off_t" | "u32" | "clockid_t" | "id_t" => {
-          (ty.to_token_stream(), false)
-        }
+        "RawFd" | "socklen_t" | "c_int" | "c_uint" | "c_ulong" | "c_long" | "i16" | "i32"
+        | "i64" | "u64" | "usize" | "isize" | "size_t" | "key_serial_t" | "AddressType"
+        | "mode_t" | "uid_t" | "pid_t" | "gid_t" | "off_t" | "u32" | "clockid_t" | "id_t"
+        | "aio_context_t" => (ty.to_token_stream(), false),
         "sockaddr" | "CString" | "PathBuf" | "timex" | "cap_user_header" | "cap_user_data"
         | "timespec" | "clone_args" | "epoll_event" | "sigset_t" | "stat" | "statfs"
-        | "futex_waitv" | "user_desc" | "itimerval" | "rlimit" | "rusage" | "timeval" | "timezone" => {
+        | "futex_waitv" | "user_desc" | "itimerval" | "rlimit" | "rusage" | "timeval" | "__aio_sigset"
+        | "timezone" | "iocb" | "io_event" | "io_uring_params" => {
           (quote!(Result<#ty, #crate_token::InspectError>), true)
         }
         _ => {
@@ -491,9 +491,8 @@ fn wrap_syscall_arg_type(
             };
             let arg = arg.args.to_token_stream().to_string();
             match arg.as_str() {
-              "PathBuf" | "timespec" | "Vec < CString >" | "CString" | "Vec < c_ulong >" | "timezone" => {
-                (quote!(Result<#ty, #crate_token::InspectError>), true)
-              }
+              "PathBuf" | "timespec" | "Vec < CString >" | "CString" | "Vec < c_ulong >"
+              | "timezone" => (quote!(Result<#ty, #crate_token::InspectError>), true),
               _ => panic!("Unsupported inner syscall arg type: {:?}", arg),
             }
           } else if ty.ident == "Vec" {
@@ -503,7 +502,7 @@ fn wrap_syscall_arg_type(
             let arg = arg.args.to_token_stream().to_string();
             match arg.as_str() {
               "u8" | "CString" | "epoll_event" | "futex_waitv" | "c_ulong" | "linux_dirent"
-              | "linux_dirent64" | "gid_t" => {
+              | "io_event" | "linux_dirent64" | "gid_t" | "AddressType" => {
                 (quote!(Result<#ty, #crate_token::InspectError>), true)
               }
               _ => panic!("Unsupported inner syscall arg type: {:?}", arg),

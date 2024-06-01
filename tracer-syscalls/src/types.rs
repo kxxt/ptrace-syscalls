@@ -2,7 +2,7 @@
 
 #![allow(non_camel_case_types)]
 
-use nix::libc::{c_char, c_int, c_long, c_uint, c_ulong, c_ushort, ino64_t, off64_t, off_t};
+use nix::libc::{c_char, c_int, c_long, c_uint, c_ulong, c_ushort, ino64_t, off64_t, off_t, sigset_t, size_t};
 
 pub type key_serial_t = i32; // https://github.com/Distrotech/keyutils/blob/9d52b8ab86931fb5a66fa5b567ea01875f31016e/keyutils.h#L22
 
@@ -78,4 +78,67 @@ pub struct linux_dirent64 {
 pub struct timezone {
   tz_minuteswest: c_int,
   tz_dsttime: c_int,
+}
+
+pub type aio_context_t = c_ulong;
+
+#[derive(Debug, Clone, PartialEq)]
+#[repr(C)]
+pub struct io_event {
+  data: u64,
+  obj: u64,
+  res: i64,
+  res2: i64,
+}
+
+
+#[derive(Debug, Clone, PartialEq)]
+#[repr(C)]
+pub struct __aio_sigset {
+  sigmask: *const sigset_t,
+  sigsetsize: size_t,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[repr(C)]
+pub struct io_uring_params {
+  sq_entries: u32,
+  cq_entries: u32,
+  flags: u32,
+  sq_thread_cpu: u32,
+  sq_thread_idle: u32,
+  features: u32,
+  wq_fd: i32,
+  resv: [u32; 3],
+  sq_off: io_sqring_offsets,
+  cq_off: io_cqring_offsets,
+}
+
+
+#[derive(Debug, Clone, PartialEq)]
+#[repr(C)]
+pub struct io_sqring_offsets {
+  head: u32,
+  tail: u32,
+  ring_mask: u32,
+  ring_entries: u32,
+  flags: u32,
+  dropped: u32,
+  array: u32,
+  resv1: u32,
+  user_addr: u64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[repr(C)]
+pub struct io_cqring_offsets {
+  head: u32,
+  tail: u32,
+  ring_mask: u32,
+  ring_entries: u32,
+  overflow: u32,
+  cqes: u32,
+  flags: u32,
+  resv1: u32,
+  user_addr: u64,
 }

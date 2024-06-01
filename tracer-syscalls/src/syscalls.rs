@@ -7,9 +7,9 @@ use std::{
 };
 
 use nix::libc::{
-  c_char, c_long, c_uint, c_ulong, c_void, clockid_t, clone_args, epoll_event, gid_t, mode_t,
-  off_t, pid_t, sigset_t, size_t, sockaddr, socklen_t, ssize_t, timespec, timex, uid_t, stat,
-  statfs, timeval, itimerval, itimerspec, id_t, rlimit, rusage
+  c_char, c_long, c_uint, c_ulong, c_void, clockid_t, clone_args, epoll_event, gid_t, id_t, iocb,
+  itimerspec, itimerval, mode_t, off_t, pid_t, rlimit, rusage, sigset_t, size_t, sockaddr,
+  socklen_t, ssize_t, stat, statfs, timespec, timeval, timex, uid_t,
 };
 use nix::sys::ptrace::AddressType;
 use nix::unistd::Pid;
@@ -196,7 +196,7 @@ gen_syscalls! {
     { fd: RawFd, cmd: c_uint, key: CString, value: CString, aux: c_int } -> c_int for [x86_64: 431, aarch64: 431, riscv64: 431],
   fsetxattr(fd: RawFd, name: *const c_char, value: *const c_void, size: size_t, flags: c_int) /
     { fd: RawFd, name: CString, value: CString, size: size_t, flags: c_int } -> c_int for [x86_64: 190, aarch64: 7, riscv64: 7],
-  // https://lwn.net/Articles/759499/ 
+  // https://lwn.net/Articles/759499/
   fsmount(fd: RawFd, flags: c_uint, ms_flags: c_uint) /
     { fd: RawFd, flags: c_uint, ms_flags: c_uint } -> c_int for [x86_64: 432, aarch64: 432, riscv64: 432],
   fsopen(fsname: *const c_char, flags: c_uint) / { fsname: CString, flags: c_uint } -> c_int for [x86_64: 430, aarch64: 430, riscv64: 430],
@@ -285,4 +285,42 @@ gen_syscalls! {
   // getxgid
   // getxpid
   // getxuid
+  init_module(module_image: *mut c_void, len: c_ulong, param_values: *const c_char) /
+    { module_image: Vec<u8>, len: c_ulong, param_values: CString } -> c_int for [x86_64: 175, aarch64: 105, riscv64: 105],
+  inotify_add_watch(fd: RawFd, pathname: *const c_char, mask: u32) /
+    { fd: RawFd, pathname: PathBuf, mask: u32 } -> c_int for [x86_64: 254, aarch64: 27, riscv64: 27],
+  inotify_init() / {} -> c_int for [x86_64: 253],
+  inotify_init1(flags: c_int) / { flags: c_int } -> c_int for [x86_64: 294, aarch64: 26, riscv64: 26],
+  inotify_rm_watch(fd: RawFd, wd: c_int) / { fd: RawFd, wd: c_int } -> c_int for [x86_64: 255, aarch64: 28, riscv64: 28],
+  io_cancel(ctx_id: aio_context_t, iocb: *mut iocb, result: *mut io_event) /
+    { ctx_id: aio_context_t, iocb: iocb } -> c_int + { result: io_event } for [x86_64: 210, aarch64: 3, riscv64: 3],
+  io_destory(ctx_id: aio_context_t) / { ctx_id: aio_context_t } -> c_int for [x86_64: 207, aarch64: 1, riscv64: 1],
+  io_getevents(ctx_id: aio_context_t, min_nr: c_long, nr: c_long, events: *mut io_event, timeout: *mut timespec) /
+    { ctx_id: aio_context_t, min_nr: c_long, nr: c_long, timeout: Option<timespec> }
+    -> c_int + { events: Vec<io_event> } for [x86_64: 208, aarch64: 4, riscv64: 4],
+  io_pgetevents(ctx_id: aio_context_t, min_nr: c_long, nr: c_long, events: *mut io_event, timeout: *mut timespec, sig: *const __aio_sigset) /
+    { ctx_id: aio_context_t, min_nr: c_long, nr: c_long, timeout: Option<timespec>, sig: __aio_sigset }
+    -> c_int + { events: Vec<io_event> } for [x86_64: 333, aarch64: 292, riscv64: 292],
+  // io_pgetevents_time64
+  io_setup(nr_events: c_ulong, ctx_idp: *mut aio_context_t) / { nr_events: c_ulong }
+    -> c_int + { ctx_idp: aio_context_t } for [x86_64: 206, aarch64: 0, riscv64: 0],
+  // io_submit: iocbpp is an array of iocb pointers. TODO: how to handle it?
+  io_submit(ctx_id: aio_context_t, nr: c_long, iocbpp: *mut *mut iocb) /
+    { ctx_id: aio_context_t, nr: c_long, iocbpp: Vec<AddressType> } -> c_int for [x86_64: 209, aarch64: 2, riscv64: 2],
+  // io_uring_enter: arg can be a sigset_t ptr or io_uring_getevents_arg ptr depending on the flags
+  io_uring_enter(fd: c_uint, to_submit: c_uint, min_complete: c_uint, flags: c_uint, arg: AddressType, argsz: size_t) /
+    { fd: c_uint, to_submit: c_uint, min_complete: c_uint, flags: c_uint, arg: Vec<u8>, argsz: size_t }
+    -> c_int for [x86_64: 426, aarch64: 426, riscv64: 426],
+  // arg can point to a lot of different struct (array) depending on the op
+  io_uring_register(fd: c_uint, op: c_uint, arg: AddressType, nr_args: c_uint) /
+    { fd: c_uint, op: c_uint, arg: AddressType, nr_args: c_uint } -> c_int for [x86_64: 427, aarch64: 427, riscv64: 427],
+  io_uring_setup(entries: u32, p: *mut io_uring_params) /
+    { entries: c_uint, p: io_uring_params } -> c_int + { p: io_uring_params } for [x86_64: 425, aarch64: 425, riscv64: 425],
+  ioctl(fd: RawFd, request: c_ulong, argp: AddressType) / { fd: RawFd, request: c_ulong, argp: AddressType }
+    -> c_int for [x86_64: 16, aarch64: 29, riscv64: 29],
+  ioperm(from: c_ulong, num: c_ulong, turn_on: c_int) / { from: c_ulong, num: c_ulong, turn_on: c_int } -> c_int for [x86_64: 173],
+  iopl(level: c_int) / { level: c_int } -> c_int for [x86_64: 172],
+  ioprio_get(which: c_int, who: c_int) / { which: c_int, who: c_int } -> c_int for [x86_64: 252, aarch64: 31, riscv64: 31],
+  ioprio_set(which: c_int, who: c_int, ioprio: c_int) / { which: c_int, who: c_int, ioprio: c_int } -> c_int for [x86_64: 251, aarch64: 30, riscv64: 30],
+  // ipc
 }
