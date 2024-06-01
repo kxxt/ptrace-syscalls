@@ -323,4 +323,14 @@ gen_syscalls! {
   ioprio_get(which: c_int, who: c_int) / { which: c_int, who: c_int } -> c_int for [x86_64: 252, aarch64: 31, riscv64: 31],
   ioprio_set(which: c_int, who: c_int, ioprio: c_int) / { which: c_int, who: c_int, ioprio: c_int } -> c_int for [x86_64: 251, aarch64: 30, riscv64: 30],
   // ipc
+  kcmp(pid1: pid_t, pid2: pid_t, r#type: c_int, idx1: c_ulong, idx2: c_ulong) /
+    { pid1: pid_t, pid2: pid_t, r#type: c_int, idx1: c_ulong, idx2: c_ulong } -> c_int for [x86_64: 312, aarch64: 272, riscv64: 272],
+  // kern_features
+  kexec_file_load(kernel_fd: RawFd, initrd_fd: RawFd, cmdline_len: c_ulong, cmdline: *const c_char, flags: c_ulong) /
+    { kernel_fd: RawFd, initrd_fd: RawFd, cmdline_len: c_ulong, cmdline: CString, flags: c_ulong } -> c_long for [x86_64: 320, aarch64: 294, riscv64: 294],
+  kexec_load(entry: c_ulong, nr_segments: c_ulong, segments: *mut kexec_segment, flags: c_ulong) /
+    { entry: c_ulong, nr_segments: c_ulong, segments: Vec<kexec_segment>, flags: c_ulong } -> c_long for [x86_64: 246, aarch64: 104, riscv64: 104],
+  keyctl(option: c_int, arg2: c_ulong, arg3: c_ulong, arg4: c_ulong, arg5: c_ulong) /
+    { option: c_int, arg2: c_ulong, arg3: c_ulong, arg4: c_ulong, arg5: c_ulong } -> c_long for [x86_64: 250, aarch64: 219, riscv64: 219],
+  kill(pid: pid_t, sig: c_int) / { pid: pid_t, sig: c_int } -> c_int for [x86_64: 62, aarch64: 129, riscv64: 129],
 }

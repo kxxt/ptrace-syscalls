@@ -2,6 +2,8 @@
 
 #![allow(non_camel_case_types)]
 
+use std::ffi::c_void;
+
 use nix::libc::{c_char, c_int, c_long, c_uint, c_ulong, c_ushort, ino64_t, off64_t, off_t, sigset_t, size_t};
 
 pub type key_serial_t = i32; // https://github.com/Distrotech/keyutils/blob/9d52b8ab86931fb5a66fa5b567ea01875f31016e/keyutils.h#L22
@@ -141,4 +143,13 @@ pub struct io_cqring_offsets {
   flags: u32,
   resv1: u32,
   user_addr: u64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[repr(C)]
+pub struct kexec_segment {
+  buf: *mut c_void,
+  bufsz: size_t,
+  mem: *mut c_void,
+  memsz: size_t,
 }

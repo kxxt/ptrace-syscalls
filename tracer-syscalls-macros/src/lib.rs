@@ -502,7 +502,7 @@ fn wrap_syscall_arg_type(
             let arg = arg.args.to_token_stream().to_string();
             match arg.as_str() {
               "u8" | "CString" | "epoll_event" | "futex_waitv" | "c_ulong" | "linux_dirent"
-              | "io_event" | "linux_dirent64" | "gid_t" | "AddressType" => {
+              | "io_event" | "linux_dirent64" | "gid_t" | "AddressType" | "kexec_segment" => {
                 (quote!(Result<#ty, #crate_token::InspectError>), true)
               }
               _ => panic!("Unsupported inner syscall arg type: {:?}", arg),

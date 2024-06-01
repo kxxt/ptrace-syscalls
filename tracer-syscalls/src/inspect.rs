@@ -15,7 +15,7 @@ use nix::{
 
 use crate::{
   arch::PtraceRegisters,
-  types::{__aio_sigset, cap_user_data, cap_user_header, futex_waitv, io_event, io_uring_params, linux_dirent, linux_dirent64, timezone},
+  types::{__aio_sigset, cap_user_data, cap_user_header, futex_waitv, io_event, io_uring_params, kexec_segment, linux_dirent, linux_dirent64, timezone},
 };
 
 /// Inspect the registers captured by ptrace and return the inspection result.
@@ -242,6 +242,12 @@ impl InspectFromPid for Result<io_uring_params, InspectError> {
 
 
 impl InspectFromPid for Result<io_event, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+impl InspectFromPid for Result<kexec_segment, InspectError> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
