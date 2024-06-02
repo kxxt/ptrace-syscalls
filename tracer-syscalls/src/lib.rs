@@ -4,6 +4,7 @@ pub use nix::sys::ptrace::AddressType;
 mod arch;
 mod inspect;
 mod syscalls;
+mod group;
 pub mod types;
 
 pub use inspect::*;
