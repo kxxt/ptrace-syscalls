@@ -9,6 +9,7 @@ pub mod types;
 
 pub use inspect::*;
 pub use syscalls::*;
+pub use group::*;
 
 pub trait SyscallNumber {
   fn syscall_number(&self) -> isize;

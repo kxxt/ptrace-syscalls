@@ -19,13 +19,22 @@ use nix::{
 use crate::{
   arch::PtraceRegisters,
   types::{
-    __aio_sigset, __mount_arg, cap_user_data, cap_user_header, futex_waitv, io_event, io_uring_params, kexec_segment, landlock_ruleset_attr, linux_dirent, linux_dirent64, timezone
+    __aio_sigset, __mount_arg, cap_user_data, cap_user_header, futex_waitv, io_event,
+    io_uring_params, kexec_segment, landlock_ruleset_attr, linux_dirent, linux_dirent64, timezone,
   },
 };
 
 /// Inspect the registers captured by ptrace and return the inspection result.
 pub trait FromInspectingRegs {
   fn from_inspecting_regs(pid: Pid, regs: &PtraceRegisters) -> Self;
+}
+
+pub trait SyscallStopInspect {
+  type RawArgs: Copy;
+  type Args;
+  type Result;
+  fn inspect_sysenter(raw_args: Self::RawArgs) -> Self::Args;
+  fn inspect_sysexit(raw_args: Self::RawArgs, regs: &PtraceRegisters) -> Self::Result;
 }
 
 /// Use ptrace to inspect the process with the given pid and return the inspection result.
@@ -298,7 +307,6 @@ impl InspectFromPid for Result<__mount_arg, InspectError> {
     todo!()
   }
 }
-
 
 // impl<T> InspectFromPid for Result<T, InspectError>
 // where

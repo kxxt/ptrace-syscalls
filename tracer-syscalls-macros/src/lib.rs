@@ -38,6 +38,9 @@ struct SyscallEntry {
   for_token: Token![for],
   bracket_token: token::Bracket,
   archs: Punctuated<Arch, Token![,]>,
+  group_token: Token![~],
+  bracket_token_2: token::Bracket,
+  groups: Punctuated<Ident, Token![,]>,
 }
 
 impl Parse for SyscallEntry {
@@ -45,6 +48,7 @@ impl Parse for SyscallEntry {
     let content;
     let raw_args;
     let archs_content;
+    let groups_content;
     Ok(SyscallEntry {
       name: input.parse()?,
       paren_token: parenthesized!(raw_args in input),
@@ -62,6 +66,9 @@ impl Parse for SyscallEntry {
           None
         }
       },
+      group_token: input.parse()?,
+      bracket_token_2: bracketed!(groups_content in input),
+      groups: groups_content.parse_terminated(Ident::parse, Token![,])?,
       for_token: input.parse()?,
       bracket_token: bracketed!(archs_content in input),
       archs: archs_content.parse_terminated(Arch::parse, Token![,])?,
@@ -478,12 +485,31 @@ fn wrap_syscall_arg_type(
         | "i64" | "u64" | "usize" | "isize" | "size_t" | "key_serial_t" | "AddressType"
         | "mode_t" | "uid_t" | "pid_t" | "gid_t" | "off_t" | "u32" | "clockid_t" | "id_t"
         | "aio_context_t" => (ty.to_token_stream(), false),
-        "sockaddr" | "CString" | "PathBuf" | "timex" | "cap_user_header" | "cap_user_data"
-        | "timespec" | "clone_args" | "epoll_event" | "sigset_t" | "stat" | "statfs"
-        | "futex_waitv" | "user_desc" | "itimerval" | "rlimit" | "rusage" | "timeval" | "__aio_sigset"
-        | "timezone" | "iocb" | "io_event" | "io_uring_params" | "landlock_ruleset_attr" | "__mount_arg" => {
-          (quote!(Result<#ty, #crate_token::InspectError>), true)
-        }
+        "sockaddr"
+        | "CString"
+        | "PathBuf"
+        | "timex"
+        | "cap_user_header"
+        | "cap_user_data"
+        | "timespec"
+        | "clone_args"
+        | "epoll_event"
+        | "sigset_t"
+        | "stat"
+        | "statfs"
+        | "futex_waitv"
+        | "user_desc"
+        | "itimerval"
+        | "rlimit"
+        | "rusage"
+        | "timeval"
+        | "__aio_sigset"
+        | "timezone"
+        | "iocb"
+        | "io_event"
+        | "io_uring_params"
+        | "landlock_ruleset_attr"
+        | "__mount_arg" => (quote!(Result<#ty, #crate_token::InspectError>), true),
         _ => {
           if ty.ident == "Option" {
             let PathArguments::AngleBracketed(arg) = &ty.arguments else {
@@ -502,9 +528,8 @@ fn wrap_syscall_arg_type(
             let arg = arg.args.to_token_stream().to_string();
             match arg.as_str() {
               "u8" | "CString" | "epoll_event" | "futex_waitv" | "c_ulong" | "linux_dirent"
-              | "io_event" | "linux_dirent64" | "gid_t" | "AddressType" | "kexec_segment" | "u64" => {
-                (quote!(Result<#ty, #crate_token::InspectError>), true)
-              }
+              | "io_event" | "linux_dirent64" | "gid_t" | "AddressType" | "kexec_segment"
+              | "u64" => (quote!(Result<#ty, #crate_token::InspectError>), true),
               _ => panic!("Unsupported inner syscall arg type: {:?}", arg),
             }
           } else if ty.ident == "Result" {
