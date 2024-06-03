@@ -481,6 +481,15 @@ gen_syscalls! {
   munlock(addr: *const c_void, len: size_t) / { addr: AddressType, len: size_t } -> c_int ~ [Memory] for [x86_64: 150, aarch64: 229, riscv64: 229],
   munlockall() / {} -> c_int ~ [Memory] for [x86_64: 152, aarch64: 231, riscv64: 231],
   munmap(addr: *mut c_void, length: size_t) / { addr: AddressType, length: size_t } -> c_int ~ [Memory] for [x86_64: 11, aarch64: 215, riscv64: 215],
+  // TODO: DST file_handle
+  name_to_handle_at(dirfd: RawFd, pathname: *const c_char, handle: *mut c_void, mount_id: *mut c_int, flags: c_int) /
+    { dirfd: RawFd, pathname: PathBuf, flags: c_int } -> c_int + { handle: Vec<u8>, mount_id: c_int }
+    ~ [Desc, File] for [x86_64: 303, aarch64: 264, riscv64: 264],
+  nanosleep(req: *const timespec, rem: *mut timespec) / { req: timespec } -> c_int + { rem: Option<timespec> }
+    ~ [Clock] for [x86_64: 35, aarch64: 230, riscv64: 230],
+  newfstatat(dirfd: RawFd, pathname: *const c_char, statbuf: *mut stat, flags: c_int) /
+    { dirfd: RawFd, pathname: PathBuf, flags: c_int } -> c_int + { statbuf: stat }
+    ~ [Desc, File, FStat, StatLike] for [x86_64: 262, aarch64: 79, riscv64: 79],
 }
 
 // pub use cfg_if_has_syscall;
