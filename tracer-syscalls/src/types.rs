@@ -191,3 +191,12 @@ pub struct __mount_arg {
 //   ctx_len: u64,
 //   ctx: [u8; ctx_len],
 // }
+
+#[derive(Debug, Clone, PartialEq)]
+#[repr(C)]
+pub struct mount_attr {
+  attr_set: u64,
+  attr_clr: u64,
+  propagation: u64,
+  userns_fd: u64,
+}

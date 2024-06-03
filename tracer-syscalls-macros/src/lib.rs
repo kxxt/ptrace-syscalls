@@ -597,8 +597,8 @@ fn wrap_syscall_arg_type(
         "Unit" => (quote!(()), false),
         "RawFd" | "socklen_t" | "c_int" | "c_uint" | "c_ulong" | "c_long" | "i16" | "i32"
         | "i64" | "u64" | "usize" | "isize" | "size_t" | "key_serial_t" | "AddressType"
-        | "mode_t" | "uid_t" | "pid_t" | "gid_t" | "off_t" | "u32" | "clockid_t" | "id_t"
-        | "aio_context_t" => (ty.to_token_stream(), false),
+        | "mode_t" | "uid_t" | "pid_t" | "gid_t" | "off_t" | "u32" | "clockid_t" | "id_t" | "key_t"
+        | "mqd_t" | "aio_context_t" | "dev_t" => (ty.to_token_stream(), false),
         "sockaddr"
         | "CString"
         | "PathBuf"
@@ -623,6 +623,9 @@ fn wrap_syscall_arg_type(
         | "io_event"
         | "io_uring_params"
         | "landlock_ruleset_attr"
+        | "mq_attr"
+        | "sigevent"
+        | "msqid_ds"
         | "__mount_arg" => (quote!(Result<#ty, #crate_token::InspectError>), true),
         _ => {
           if ty.ident == "Option" {
@@ -632,7 +635,9 @@ fn wrap_syscall_arg_type(
             let arg = arg.args.to_token_stream().to_string();
             match arg.as_str() {
               "PathBuf" | "timespec" | "Vec < CString >" | "CString" | "Vec < c_ulong >"
-              | "timezone" => (quote!(Result<#ty, #crate_token::InspectError>), true),
+              | "Vec < c_uint >" | "timezone" | "mq_attr" => {
+                (quote!(Result<#ty, #crate_token::InspectError>), true)
+              }
               _ => panic!("Unsupported inner syscall arg type: {:?}", arg),
             }
           } else if ty.ident == "Vec" {
@@ -641,9 +646,11 @@ fn wrap_syscall_arg_type(
             };
             let arg = arg.args.to_token_stream().to_string();
             match arg.as_str() {
-              "u8" | "CString" | "epoll_event" | "futex_waitv" | "c_ulong" | "linux_dirent"
-              | "io_event" | "linux_dirent64" | "gid_t" | "AddressType" | "kexec_segment"
-              | "u64" => (quote!(Result<#ty, #crate_token::InspectError>), true),
+              "c_int" | "u8" | "CString" | "epoll_event" | "futex_waitv" | "c_ulong"
+              | "linux_dirent" | "io_event" | "linux_dirent64" | "gid_t" | "AddressType"
+              | "kexec_segment" | "c_uchar" | "u64" | "mount_attr" => {
+                (quote!(Result<#ty, #crate_token::InspectError>), true)
+              }
               _ => panic!("Unsupported inner syscall arg type: {:?}", arg),
             }
           } else if ty.ident == "Result" {

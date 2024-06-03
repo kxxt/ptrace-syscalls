@@ -14,9 +14,10 @@ use crate::{
 use crate::{SyscallGroups, SyscallGroupsGetter};
 use enumflags2::BitFlags;
 use nix::libc::{
-  c_char, c_long, c_uint, c_ulong, c_void, clockid_t, clone_args, epoll_event, gid_t, id_t, iocb,
-  itimerspec, itimerval, mode_t, off_t, pid_t, rlimit, rusage, sigset_t, size_t, sockaddr,
-  socklen_t, ssize_t, stat, statfs, timespec, timeval, timex, uid_t,
+  c_char, c_long, c_uchar, c_uint, c_ulong, c_void, clockid_t, clone_args, dev_t, epoll_event,
+  gid_t, id_t, iocb, itimerspec, itimerval, key_t, mode_t, mq_attr, mqd_t, msqid_ds, off_t, pid_t,
+  rlimit, rusage, sigevent, sigset_t, size_t, sockaddr, socklen_t, ssize_t, stat, statfs, timespec,
+  timeval, timex, uid_t,
 };
 use nix::sys::ptrace::AddressType;
 use nix::unistd::Pid;
@@ -391,6 +392,95 @@ gen_syscalls! {
     { attr: c_uint, ctx: Vec<u8>, size: u32, flags: u32 } -> c_int ~ [] for [x86_64: 460, aarch64: 460, riscv64: 460],
   lstat(pathname: *const c_char, statbuf: *mut stat) / { pathname: PathBuf } -> c_int + { statbuf: stat } ~ [File, LStat, StatLike] for [x86_64: 6],
   // lstat64
+  madvise(addr: *mut c_void, length: size_t, advice: c_int) / { addr: AddressType, length: size_t, advice: c_int } -> c_int
+    ~ [Memory] for [x86_64: 28, aarch64: 233, riscv64: 233],
+  map_shadow_stack(addr: *mut c_void, len: c_ulong, flags: c_int) / { addr: AddressType, len: c_ulong, flags: c_int } -> c_int
+    ~ [Memory] for [x86_64: 453, aarch64: 453, riscv64: 453],
+  mbind(addr: *mut c_void, len: c_ulong, mode: c_int, nodemask: *const c_ulong, maxnode: c_ulong, flags: c_uint) /
+    { len: c_ulong, mode: c_int, nodemask: Vec<c_ulong>, maxnode: c_ulong, flags: c_uint } -> c_long
+    ~ [Memory] for [x86_64: 237, aarch64: 235, riscv64: 235],
+  membarrier(cmd: c_int, flags: c_uint, cpu_id: c_int) / { cmd: c_int, flags: c_int, cpu_id: c_int } -> c_int
+    ~ [Memory] for [x86_64: 375, aarch64: 375, riscv64: 375],
+  memfd_create(name: *const c_char, flags: c_uint) / { name: CString, flags: c_uint } -> RawFd
+    ~ [Desc] for [x86_64: 319, aarch64: 279, riscv64: 279],
+  memfd_secret(flags: c_uint) / { flags: c_uint } -> RawFd ~ [Desc] for [x86_64: 384, aarch64: 384, riscv64: 384],
+  // memory_ordering
+  // migrate_pages: TODO: what's the size of the Vec
+  migrate_pages(pid: pid_t, maxnode: c_ulong, old_nodes: *const c_ulong, new_nodes: *const c_ulong) /
+    { pid: pid_t, maxnode: c_ulong, old_nodes: Vec<c_ulong>, new_nodes: Vec<c_ulong> } -> c_long
+    ~ [Memory] for [x86_64: 256, aarch64: 238, riscv64: 238],
+  // mincore: vec is at least of len (length+PAGE_SIZE-1) / PAGE_SIZE, where PAGE_SIZE is sysconf(_SC_PAGESIZE)
+  mincore(addr: *mut c_void, length: size_t, vec: *mut c_uchar) / { addr: AddressType, length: size_t } -> c_int + { vec: Vec<c_uchar> }
+    ~ [Memory] for [x86_64: 27, aarch64: 232, riscv64: 232],
+  mkdir(pathname: *const c_char, mode: mode_t) / { pathname: PathBuf, mode: mode_t } -> c_int ~ [File] for [x86_64: 83],
+  mkdirat(dirfd: RawFd, pathname: *const c_char, mode: mode_t) / { dirfd: RawFd, pathname: PathBuf, mode: mode_t } -> c_int
+    ~ [Desc, File] for [x86_64: 258, aarch64: 34, riscv64: 34],
+  mknod(pathname: *const c_char, mode: mode_t, dev: dev_t) / { pathname: PathBuf, mode: mode_t, dev: dev_t } -> c_int ~ [File] for [x86_64: 133],
+  mknodat(dirfd: RawFd, pathname: *const c_char, mode: mode_t, dev: dev_t) /
+    { dirfd: RawFd, pathname: PathBuf, mode: mode_t, dev: dev_t } -> c_int ~ [Desc, File] for [x86_64: 259, aarch64: 33, riscv64: 33],
+  mlock(addr: *const c_void, len: size_t) / { addr: AddressType, len: size_t } -> c_int ~ [Memory] for [x86_64: 149, aarch64: 228, riscv64: 228],
+  mlock2(start: *const c_void, len: size_t, flags: c_int) / { start: AddressType, len: size_t, flags: c_int } -> c_int
+    ~ [Memory] for [x86_64: 325, aarch64: 284, riscv64: 284],
+  mlockall(flags: c_int) / { flags: c_int } -> c_int ~ [Memory] for [x86_64: 151, aarch64: 230, riscv64: 230],
+  mmap(addr: *mut c_void, length: size_t, prot: c_int, flags: c_int, fd: RawFd, offset: off_t) /
+    { addr: AddressType, length: size_t, prot: c_int, flags: c_int, fd: RawFd, offset: off_t } -> AddressType
+    ~ [Memory] for [x86_64: 9, aarch64: 222, riscv64: 222],
+  // mmap2
+  modify_ldt(func: c_int, ptr: *mut c_void, bytecount: c_ulong) / { func: c_int, ptr: AddressType, bytecount: c_ulong } -> c_int
+    ~ [] for [x86_64: 154],
+  mount(source: *const c_char, target: *const c_char, filesystemtype: *const c_char, mountflags: c_ulong, data: *const c_void) /
+    { source: CString, target: PathBuf, filesystemtype: CString, mountflags: c_ulong, data: Option<CString> } -> c_int
+    ~ [File] for [x86_64: 40, aarch64: 165, riscv64: 165],
+  // mount_setattr: TODO: the mount_attr struct is extensible
+  mount_setattr(dirfd: RawFd, pathname: *const c_char, flags: c_uint, attr: *mut mount_attr, size: size_t) /
+    { dirfd: RawFd, pathname: PathBuf, flags: c_uint, attr: Vec<mount_attr>, size: size_t } -> c_int
+    ~ [Desc, File] for [x86_64: 442, aarch64: 442, riscv64: 442],
+  move_mount(from_dfd: RawFd, from_path: *const c_char, to_dfd: RawFd, to_path: *const c_char, ms_flags: c_uint) /
+    { from_dfd: RawFd, from_path: PathBuf, to_dfd: RawFd, to_path: PathBuf, ms_flags: c_uint } -> c_int
+    ~ [Desc, File] for [x86_64: 429, aarch64: 429, riscv64: 429],
+  // move_pages: pages, nodes and status are arrays of size count
+  move_pages(pid: pid_t, count: c_ulong, pages: *mut *mut c_void, nodes: *const c_int, status: *mut c_int, flags: c_int) /
+    { pid: pid_t, count: c_ulong, pages: Vec<AddressType>, nodes: Vec<c_int>, flags: c_int } -> c_long + { status: Vec<c_int> }
+    ~ [Memory] for [x86_64: 279, aarch64: 239, riscv64: 239],
+  mprotect(addr: *mut c_void, len: size_t, prot: c_int) / { addr: AddressType, len: size_t, prot: c_int } -> c_int
+    ~ [Memory] for [x86_64: 10, aarch64: 226, riscv64: 226],
+  mq_getsetattr(mqdes: mqd_t, newattr: *const mq_attr, oldattr: *mut mq_attr) /
+    { mqdes: mqd_t, newattr: mq_attr, oldattr: mq_attr } -> c_int + { oldattr: mq_attr }
+    ~ [Desc] for [x86_64: 245, aarch64: 185, riscv64: 185],
+  mq_notify(mqdes: mqd_t, sevp: *const sigevent) / { mqdes: mqd_t, sevp: sigevent } -> c_int ~ [Desc] for [x86_64: 244, aarch64: 184, riscv64: 184],
+  mq_open(name: *const c_char, oflag: c_int, mode: mode_t, attr: *mut mq_attr) /
+    { name: CString, oflag: c_int, mode: mode_t, attr: Option<mq_attr> } -> mqd_t
+    ~ [Desc] for [x86_64: 240, aarch64: 180, riscv64: 180],
+  mq_timedreceive(mqdes: mqd_t, msg_ptr: *mut *mut c_char, msg_len: size_t, msg_prio: *mut c_uint, abs_timeout: *const timespec) /
+    { mqdes: mqd_t, msg_len: size_t, abs_timeout: timespec } -> ssize_t + { msg_ptr: Vec<CString>, msg_prio: Option<Vec<c_uint>> }
+    ~ [Desc] for [x86_64: 243, aarch64: 183, riscv64: 183],
+  // mq_timedreceive_time64
+  mq_timedsend(mqdes: mqd_t, msg_ptr: *const c_char, msg_len: size_t, msg_prio: c_uint, abs_timeout: *const timespec) /
+    { mqdes: mqd_t, msg_ptr: CString, msg_len: size_t, msg_prio: c_uint, abs_timeout: timespec } -> c_int
+    ~ [Desc] for [x86_64: 242, aarch64: 182, riscv64: 182],
+  // mq_timedsend_time64
+  mq_unlink(name: *const c_char) / { name: CString } -> c_int ~ [] for [x86_64: 241, aarch64: 181, riscv64: 181],
+  mremap(old_address: *mut c_void, old_size: size_t, new_size: size_t, flags: c_int, new_address: *mut c_void) /
+    { old_address: AddressType, old_size: size_t, new_size: size_t, flags: c_int, new_address: AddressType } -> AddressType
+    ~ [Memory] for [x86_64: 25, aarch64: 216, riscv64: 216],
+  // mseal: 6.10 https://lwn.net/Articles/954936/
+  mseal(start: AddressType, len: size_t, types: c_ulong, flags: c_ulong) / { start: AddressType, len: size_t, types: c_ulong, flags: c_ulong } -> c_int
+    ~ [Memory] for [x86_64: 462, aarch64: 462, riscv64: 462],
+  msgctl(msqid: c_int, cmd: c_int, buf: *mut msqid_ds) / { msqid: c_int, cmd: c_int } -> c_int + { buf: msqid_ds }
+    ~ [] for [x86_64: 71, aarch64: 187, riscv64: 187],
+  msgget(key: key_t, msgflg: c_int) / { key: key_t, msgflg: c_int } -> c_int ~ [] for [x86_64: 68, aarch64: 186, riscv64: 186],
+  // TODO: msgp is a ptr to DST msgbuf { long mtype; char mtext[msgsz]; }
+  msgrcv(msqid: c_int, msgp: *mut c_void, msgsz: size_t, msgtyp: c_long, msgflg: c_int) /
+    { msqid: c_int, msgsz: size_t, msgtyp: c_long, msgflg: c_int } -> ssize_t + { msgp: Vec<u8> }
+    ~ [] for [x86_64: 70, aarch64: 188, riscv64: 188],
+  msgsnd(msqid: c_int, msgp: *const c_void, msgsz: size_t, msgflg: c_int) /
+    { msqid: c_int, msgp: Vec<u8>, msgsz: size_t, msgflg: c_int } -> c_int ~ [] for [x86_64: 69, aarch64: 189, riscv64: 189],
+  msync(addr: *mut c_void, length: size_t, flags: c_int) / { addr: AddressType, length: size_t, flags: c_int } -> c_int
+    ~ [Memory] for [x86_64: 26, aarch64: 227, riscv64: 227],
+  // multiplexer
+  munlock(addr: *const c_void, len: size_t) / { addr: AddressType, len: size_t } -> c_int ~ [Memory] for [x86_64: 150, aarch64: 229, riscv64: 229],
+  munlockall() / {} -> c_int ~ [Memory] for [x86_64: 152, aarch64: 231, riscv64: 231],
+  munmap(addr: *mut c_void, length: size_t) / { addr: AddressType, length: size_t } -> c_int ~ [Memory] for [x86_64: 11, aarch64: 215, riscv64: 215],
 }
 
 // pub use cfg_if_has_syscall;
