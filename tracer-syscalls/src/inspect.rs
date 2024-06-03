@@ -9,8 +9,9 @@ use std::{
 use nix::{
   errno::Errno,
   libc::{
-    c_long, clone_args, epoll_event, iocb, itimerval, mq_attr, msqid_ds, open_how, rlimit, rusage,
-    sigevent, sigset_t, sockaddr, stat, statfs, timespec, timeval, timex,
+    c_long, clone_args, epoll_event, fd_set, iocb, iovec, itimerval, mq_attr, msqid_ds, open_how,
+    pollfd, rlimit, rlimit64, rusage, sigevent, siginfo_t, sigset_t, sockaddr, stat, statfs,
+    timespec, timeval, timex,
   },
   sys::ptrace::{self, AddressType},
   unistd::Pid,
@@ -338,6 +339,36 @@ impl InspectFromPid for Result<mount_attr, InspectError> {
 }
 
 impl InspectFromPid for Result<mq_attr, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+impl InspectFromPid for Result<iovec, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+impl InspectFromPid for Result<rlimit64, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+impl InspectFromPid for Result<siginfo_t, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+impl InspectFromPid for Result<pollfd, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+impl InspectFromPid for Result<fd_set, InspectError> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }

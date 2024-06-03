@@ -15,9 +15,9 @@ use crate::{SyscallGroups, SyscallGroupsGetter};
 use enumflags2::BitFlags;
 use nix::libc::{
   c_char, c_long, c_uchar, c_uint, c_ulong, c_void, clockid_t, clone_args, dev_t, epoll_event,
-  gid_t, id_t, iocb, itimerspec, itimerval, key_t, mode_t, mq_attr, mqd_t, msqid_ds, off_t, pid_t,
-  rlimit, rusage, sigevent, sigset_t, size_t, sockaddr, socklen_t, ssize_t, stat, statfs, timespec,
-  timeval, timex, uid_t, open_how
+  gid_t, id_t, iocb, itimerspec, itimerval, key_t, mode_t, mq_attr, mqd_t, msqid_ds, nfds_t, off_t,
+  open_how, pid_t, pollfd, rlimit, rusage, sigevent, siginfo_t, sigset_t, size_t, sockaddr,
+  socklen_t, ssize_t, stat, statfs, timespec, timeval, timex, uid_t, loff_t, iovec, rlimit64, fd_set
 };
 use nix::sys::ptrace::AddressType;
 use nix::unistd::Pid;
@@ -510,6 +510,73 @@ gen_syscalls! {
     { dirfd: RawFd, pathname: PathBuf, how: open_how, size: size_t } -> c_int ~ [Desc, File] for [x86_64: 437, aarch64: 437, riscv64: 437],
   // or1k_atomic
   // osf_*
+  pause() / {} -> c_int ~ [Signal] for [x86_64: 29, aarch64: 34, riscv64: 34],
+  // pciconfig_iobase
+  // pciconfig_read
+  // pciconfig_write
+  // perf_event_open: TODO: attr is perf_event_attr struct
+  perf_event_open(attr: *mut c_void, pid: pid_t, cpu: c_int, group_fd: RawFd, flags: c_ulong) /
+    { attr: AddressType, pid: pid_t, cpu: c_int, group_fd: RawFd, flags: c_ulong } -> RawFd
+    ~ [Desc] for [x86_64: 298, aarch64: 241, riscv64: 241],
+  // perfctr
+  personality(persona: c_ulong) / { persona: c_ulong } -> c_int ~ [] for [x86_64: 135, aarch64: 92, riscv64: 92],
+  pidfd_getfd(pidfd: RawFd, targetfd: RawFd, flags: c_uint) / { pidfd: RawFd, targetfd: RawFd, flags: c_uint } -> RawFd
+    ~ [Desc] for [x86_64: 438, aarch64: 438, riscv64: 438],
+  pidfd_open(pid: pid_t, flags: c_uint) / { pid: pid_t, flags: c_uint } -> RawFd ~ [Desc] for [x86_64: 434, aarch64: 434, riscv64: 434],
+  pidfd_send_signal(pidfd: RawFd, sig: c_int, info: *mut siginfo_t, flags: c_uint) /
+    { pidfd: RawFd, sig: c_int, info: Option<siginfo_t>, flags: c_uint } -> c_int
+    ~ [Desc, Signal, Process] for [x86_64: 424, aarch64: 424, riscv64: 424],
+  pipe(pipefd: *mut c_int) / {} -> c_int + { pipefd: [RawFd; 2] } ~ [Desc] for [x86_64: 22],
+  pipe2(pipefd: *mut c_int, flags: c_int) / { flags: c_int } -> c_int + { pipefd: [RawFd; 2] } ~ [Desc] for [x86_64: 293, aarch64: 59, riscv64: 59],
+  pivot_root(new_root: *const c_char, put_old: *const c_char) / { new_root: PathBuf, put_old: PathBuf } -> c_int
+    ~ [File] for [x86_64: 155, aarch64: 41, riscv64: 41],
+  pkey_alloc(flags: c_uint, access_rights: c_uint) / { flags: c_uint, access_rights: c_uint } -> c_int ~ [] for [x86_64: 330, aarch64: 289, riscv64: 289],
+  pkey_free(pkey: c_int) / { pkey: c_int } -> c_int ~ [] for [x86_64: 331, aarch64: 290, riscv64: 290],
+  pkey_mprotect(addr: *mut c_void, len: size_t, prot: c_int, pkey: c_int) /
+    { addr: AddressType, len: size_t, prot: c_int, pkey: c_int } -> c_int ~ [Memory] for [x86_64: 329, aarch64: 288, riscv64: 288],
+  poll(fds: *mut pollfd, nfds: nfds_t, timeout: c_int) / { nfds: nfds_t, timeout: c_int } -> c_int + { fds: Vec<pollfd> }
+    ~ [Desc] for [x86_64: 7],
+  ppoll(fds: *mut pollfd, nfds: nfds_t, tmo_p: *const timespec, sigmask: *const sigset_t) /
+    { nfds: nfds_t, tmo_p: Option<timespec>, sigmask: Option<sigset_t> } -> c_int + { fds: Vec<pollfd> }
+    ~ [Desc] for [x86_64: 271, aarch64: 73, riscv64: 73],
+  // ppoll_time64
+  prctl(option: c_int, arg2: c_ulong, arg3: c_ulong, arg4: c_ulong, arg5: c_ulong) /
+    { option: c_int, arg2: c_ulong, arg3: c_ulong, arg4: c_ulong, arg5: c_ulong } -> c_int
+    ~ [Clock] for [x86_64: 157, aarch64: 167, riscv64: 167],
+  pread64(fd: RawFd, buf: *mut c_void, count: size_t, offset: loff_t) /
+    { fd: RawFd, count: size_t, offset: loff_t } -> ssize_t + { buf: Vec<u8> }
+    ~ [Desc] for [x86_64: 67, aarch64: 17, riscv64: 17],
+  preadv(fd: RawFd, iov: *const iovec, iovcnt: c_int, offset: off_t) /
+    { fd: RawFd, iov: Vec<iovec>, offset: off_t } -> ssize_t ~ [Desc] for [x86_64: 295, aarch64: 69, riscv64: 69],
+  preadv2(fd: RawFd, iov: *const iovec, iovcnt: c_int, offset: off_t, flags: c_int) /
+    { fd: RawFd, iov: Vec<iovec>, offset: off_t, flags: c_int } -> ssize_t ~ [Desc] for [x86_64: 327, aarch64: 286, riscv64: 286],
+  prlimit64(pid: pid_t, resource: c_int, new_limit: *const rlimit64, old_limit: *mut rlimit64) /
+    { pid: pid_t, resource: c_int, new_limit: Option<rlimit64>, old_limit: Option<rlimit64> } -> c_int + { old_limit: Option<rlimit64> }
+    ~ [] for [x86_64: 302, aarch64: 261, riscv64: 261],
+  process_madvise(pidfd: RawFd, iovec: *const iovec, vlen: size_t, advice: c_int, flags: c_uint) /
+    { pidfd: RawFd, iovec: Vec<iovec>, vlen: size_t, advice: c_int, flags: c_uint } -> c_int
+    ~ [Desc] for [x86_64: 440, aarch64: 440, riscv64: 440],
+  process_mrelease(pidfd: RawFd, flags: c_uint) / { pidfd: RawFd, flags: c_uint } -> c_int ~ [Desc] for [x86_64: 448, aarch64: 448, riscv64: 448],
+  process_vm_readv(pid: pid_t, local_iov: *const iovec, liovcnt: c_ulong, remote_iov: *const iovec, riovcnt: c_ulong, flags: c_ulong) /
+    { pid: pid_t, local_iov: Vec<iovec>, remote_iov: Vec<iovec>, flags: c_ulong } -> ssize_t
+    ~ [] for [x86_64: 310, aarch64: 270, riscv64: 270],
+  process_vm_writev(pid: pid_t, local_iov: *const iovec, liovcnt: c_ulong, remote_iov: *const iovec, riovcnt: c_ulong, flags: c_ulong) /
+    { pid: pid_t, local_iov: Vec<iovec>, remote_iov: Vec<iovec>, flags: c_ulong } -> ssize_t
+    ~ [] for [x86_64: 311, aarch64: 271, riscv64: 271],
+  // TODO: sigmask is { const kernel_sigset_t *ss;  size_t ss_len; /* Size (in bytes) of object pointed to by 'ss' */ }
+  pselect6(nfds: c_int, readfds: *mut fd_set, writefds: *mut fd_set, exceptfds: *mut fd_set, timeout: *mut timespec, sigmask: *const c_void) /
+    { readfds: Option<fd_set>, writefds: Option<fd_set>, exceptfds: Option<fd_set>, timeout: Option<timespec>, sigmask: Option<sigset_t> }
+    -> c_int + { readfds: Option<fd_set>, writefds: Option<fd_set>, exceptfds: Option<fd_set> }
+    ~ [Desc] for [x86_64: 270, aarch64: 72, riscv64: 72],
+  // pselect6_time64
+  ptrace(request: c_int, pid: pid_t, addr: *mut c_void, data: *mut c_void) / { } -> c_long
+    ~ [] for [x86_64: 101, aarch64: 117, riscv64: 117],
+  pwrite64(fd: RawFd, buf: *const c_void, count: size_t, offset: loff_t) /
+    { fd: RawFd, buf: Vec<u8>, count: size_t, offset: loff_t } -> ssize_t ~ [Desc] for [x86_64: 18, aarch64: 68, riscv64: 68],
+  pwritev(fd: RawFd, iov: *const iovec, iovcnt: c_int, offset: off_t) /
+    { fd: RawFd, iov: Vec<iovec>, offset: off_t } -> ssize_t ~ [Desc] for [x86_64: 296, aarch64: 70, riscv64: 70],
+  pwritev2(fd: RawFd, iov: *const iovec, iovcnt: c_int, offset: off_t, flags: c_int) /
+    { fd: RawFd, iov: Vec<iovec>, offset: off_t, flags: c_int } -> ssize_t ~ [Desc] for [x86_64: 328, aarch64: 287, riscv64: 287],
 }
 
 // pub use cfg_if_has_syscall;
