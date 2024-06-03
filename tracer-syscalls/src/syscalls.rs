@@ -392,3 +392,5 @@ gen_syscalls! {
   lstat(pathname: *const c_char, statbuf: *mut stat) / { pathname: PathBuf } -> c_int + { statbuf: stat } ~ [File, LStat, StatLike] for [x86_64: 6],
   // lstat64
 }
+
+// pub use cfg_if_has_syscall;

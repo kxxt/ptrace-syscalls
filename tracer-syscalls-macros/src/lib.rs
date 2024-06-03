@@ -384,6 +384,8 @@ pub fn gen_syscalls(input: TokenStream) -> TokenStream {
   let mut supported_archs = vec![];
   let mut syscall_numbers = vec![];
   let crate_token = get_crate("tracer-syscalls");
+  let mut syscall_names_dedup = vec![];
+  let mut supported_archs_dedup = vec![];
   for syscall in &input {
     let GenSyscallArgsStructResult {
       args_struct,
@@ -402,9 +404,15 @@ pub fn gen_syscalls(input: TokenStream) -> TokenStream {
     arg_struct_types.push(args_struct_type);
     raw_arg_struct_types.push(raw_args_struct_type);
     modified_arg_struct_types.push(modified_args_struct_type);
-    names.push(name);
-    supported_archs.push(archs);
+    names.push(name.clone());
+    supported_archs.push(archs.clone());
     syscall_numbers.push(syscall_number.clone());
+    if syscall_names_dedup.last() != Some(&syscall.name) {
+      syscall_names_dedup.push(syscall.name.clone());
+      supported_archs_dedup.push(archs.clone());
+    } else {
+      supported_archs_dedup.last_mut().unwrap().extend(archs);
+    }
   }
   TokenStream::from(quote::quote! {
     #(#raw_arg_structs)*
@@ -519,6 +527,45 @@ pub fn gen_syscalls(input: TokenStream) -> TokenStream {
         }
       }
     }
+
+    // This is not going to work. TODO: maybe create a rust issue for #[cfg(macro!(...))]?
+    // #[macro_export]
+    // macro_rules! cfg_if_has_syscall {
+    //   // match if/else chains with a final `else`
+    //   (
+    //       $(
+    //           if #[has $i_syscall:ident] { $( $i_tokens:tt )* }
+    //       ) else+
+    //       else { $( $e_tokens:tt )* }
+    //   ) => {
+    //     ::cfg_if::cfg_if! {
+    //       $(
+    //           if #[cfg($crate::cfg_if_has_syscall!(__internal__, $i_syscall))] { $( $i_tokens:tt )* }
+    //       ) else+
+    //       else { $( $e_tokens:tt )* }
+    //     }
+    //   };
+
+    //   // match if/else chains lacking a final `else`
+    //   (
+    //       if #[has $i_syscall:ident] { $( $i_tokens:tt )* }
+    //       $(
+    //           else if #[has $e_syscall:ident] { $( $e_tokens:tt )* }
+    //       )*
+    //   ) => {
+    //     ::cfg_if::cfg_if! {
+    //       if #[cfg($crate::cfg_if_has_syscall!(__internal__, $i_syscall))] { $( $i_tokens:tt )* }
+    //       $(
+    //           else if #[cfg($crate::cfg_if_has_syscall!(__internal__, $e_syscall))] { $( $e_tokens:tt )* }
+    //       )*
+    //     }
+    //   };
+    //   #(
+    //     (__internal__, #syscall_names_dedup) => {
+    //       any(#(target_arch = #supported_archs_dedup),*)
+    //     }
+    //   );*
+    // }
   })
 }
 

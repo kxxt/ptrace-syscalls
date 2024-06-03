@@ -181,8 +181,7 @@ pub struct __mount_arg {
   request_mask: u64,
 }
 
-
-// Can't make a sane struct with DST array member in rust 
+// Can't make a sane struct with DST array member in rust
 // #[derive(Debug, Clone, PartialEq)]
 // #[repr(C)]
 // pub struct lsm_ctx {
