@@ -1,4 +1,4 @@
-use enumflags2::bitflags;
+use enumflags2::{bitflags, BitFlags};
 
 // Keep in-sync with https://github.com/strace/strace/blob/master/src/sysent.h
 
@@ -59,6 +59,6 @@ pub enum SyscallGroups {
   Clock = 0o020000000,
 }
 
-trait SyscallGroupsGetter {
-  fn syscall_groups() -> SyscallGroups;
+pub trait SyscallGroupsGetter {
+  fn syscall_groups(&self) -> BitFlags<SyscallGroups>;
 }

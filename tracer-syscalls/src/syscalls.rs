@@ -11,10 +11,12 @@ use crate::{
   types::*,
   FromInspectingRegs, InspectError, SyscallNumber,
 };
+use crate::{SyscallGroups, SyscallGroupsGetter};
+use enumflags2::BitFlags;
 use nix::libc::{
   c_char, c_long, c_uint, c_ulong, c_void, clockid_t, clone_args, epoll_event, gid_t, id_t, iocb,
   itimerspec, itimerval, mode_t, off_t, pid_t, rlimit, rusage, sigset_t, size_t, sockaddr,
-  socklen_t, ssize_t, stat, statfs, timespec, timeval, timex, uid_t, 
+  socklen_t, ssize_t, stat, statfs, timespec, timeval, timex, uid_t,
 };
 use nix::sys::ptrace::AddressType;
 use nix::unistd::Pid;
@@ -47,6 +49,12 @@ impl FromInspectingRegs for UnknownArgs {
   }
 }
 
+impl SyscallGroupsGetter for UnknownArgs {
+  fn syscall_groups(&self) -> BitFlags<SyscallGroups> {
+    BitFlags::empty()
+  }
+}
+
 pub type Unit = ();
 
 gen_syscalls! {
@@ -54,11 +62,11 @@ gen_syscalls! {
   // _newselect
   accept(socketfd: c_int, addr: *mut sockaddr, addrlen: *mut socklen_t) /
     { socketfd: RawFd, addr: sockaddr, addrlen: Result<socklen_t, InspectError> } -> c_int + { addr: sockaddr, addrlen: Result<socklen_t, InspectError> }
-    ~ [TN] for [x86_64: 43, aarch64: 202, riscv64: 202],
+    ~ [Network] for [x86_64: 43, aarch64: 202, riscv64: 202],
   accept4(socketfd: RawFd, addr: *mut sockaddr, addrlen: *mut socklen_t, flags: c_int) /
     { socketfd: RawFd, addr: sockaddr, addrlen: Result<socklen_t, InspectError>, flags: c_int } -> c_int + { addr: sockaddr, addrlen: Result<socklen_t, InspectError> }
-    ~ [TN] for [x86_64: 288, aarch64: 242, riscv64: 242],
-  access(pathname: *const c_char, mode: c_int) / { pathname: PathBuf, mode: c_int } -> c_int ~ [TF] for [x86_64: 21],
+    ~ [Network] for [x86_64: 288, aarch64: 242, riscv64: 242],
+  access(pathname: *const c_char, mode: c_int) / { pathname: PathBuf, mode: c_int } -> c_int ~ [File] for [x86_64: 21],
   acct(filename: *const c_char) / { filename: Option<PathBuf> } -> c_int ~ [File] for [x86_64: 163, aarch64: 89, riscv64: 89],
   add_key(r#type: *const c_char, description: *const c_char, payload: *const c_void, plen: size_t, keyring: key_serial_t ) /
     { r#type: CString, description: CString, payload: Vec<u8>, plen: size_t, keyring: key_serial_t }

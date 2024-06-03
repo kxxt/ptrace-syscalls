@@ -110,6 +110,16 @@ fn gen_syscall_args_struct(
 ) -> GenSyscallArgsStructResult {
   let name = &syscall.name;
   let args = &syscall.args;
+  let groups_idents = &syscall.groups.iter().collect::<Vec<_>>();
+  let groups = if groups_idents.is_empty() {
+    quote! {
+      #crate_token::SyscallGroups::empty()
+    }
+  } else {
+    quote! {
+      #(#crate_token::SyscallGroups::#groups_idents)|*
+    }
+  };
   let arch_name_0 = syscall.archs.first().as_ref().unwrap().name.to_string();
   let arch_number_0 = &syscall.archs.first().as_ref().unwrap().number;
   let (mut arch_names, numbers): (Vec<_>, Vec<_>) = syscall
@@ -226,6 +236,9 @@ fn gen_syscall_args_struct(
     syscall_number: syscall_const_name.clone(),
     raw_args_struct: quote! {
       #[cfg(any(#(target_arch = #arch_names),*))]
+      pub const #syscall_const_name: isize = #syscall_number;
+
+      #[cfg(any(#(target_arch = #arch_names),*))]
       #[derive(Debug, Clone, Copy, PartialEq)]
       pub struct #camel_case_raw_args_type {
         #(#raw_arg_names: #raw_arg_types),*
@@ -249,11 +262,19 @@ fn gen_syscall_args_struct(
           #syscall_const_name
         }
       }
+
+      #[cfg(any(#(target_arch = #arch_names),*))]
+      impl #crate_token::SyscallGroupsGetter for #camel_case_raw_args_type {
+        #[inline(always)]
+        fn syscall_groups(&self) -> ::enumflags2::BitFlags<#crate_token::SyscallGroups> {
+          use ::enumflags2::BitFlag;
+          {
+            #groups
+          }.into()
+        }
+      }
     },
     args_struct: quote::quote! {
-      #[cfg(any(#(target_arch = #arch_names),*))]
-      pub const #syscall_const_name: isize = #syscall_number;
-
       #[cfg(any(#(target_arch = #arch_names),*))]
       #[derive(Debug, Clone, PartialEq)]
       pub struct #camel_case_args_type {
@@ -265,6 +286,17 @@ fn gen_syscall_args_struct(
         #[inline(always)]
         fn syscall_number(&self) -> isize {
           #syscall_const_name
+        }
+      }
+
+      #[cfg(any(#(target_arch = #arch_names),*))]
+      impl #crate_token::SyscallGroupsGetter for #camel_case_args_type {
+        #[inline(always)]
+        fn syscall_groups(&self) -> ::enumflags2::BitFlags<#crate_token::SyscallGroups> {
+          use ::enumflags2::BitFlag;
+          {
+            #groups
+          }.into()
         }
       }
 
@@ -298,6 +330,17 @@ fn gen_syscall_args_struct(
         #[inline(always)]
         fn syscall_number(&self) -> isize {
           #syscall_const_name
+        }
+      }
+
+      #[cfg(any(#(target_arch = #arch_names),*))]
+      impl #crate_token::SyscallGroupsGetter for #camel_case_modified_args_type {
+        #[inline(always)]
+        fn syscall_groups(&self) -> ::enumflags2::BitFlags<#crate_token::SyscallGroups> {
+          use ::enumflags2::BitFlag;
+          {
+            #groups
+          }.into()
         }
       }
 
@@ -409,6 +452,18 @@ pub fn gen_syscalls(input: TokenStream) -> TokenStream {
       }
     }
 
+    impl #crate_token::SyscallGroupsGetter for SyscallRawArgs {
+      #[inline(always)]
+      fn syscall_groups(&self) -> ::enumflags2::BitFlags<#crate_token::SyscallGroups> {
+        match self {
+          #(
+            Self::#names(args) => args.syscall_groups(),
+          )*
+          Self::Unknown(args) => args.syscall_groups(),
+        }
+      }
+    }
+
     impl #crate_token::SyscallNumber for SyscallArgs {
       #[inline(always)]
       fn syscall_number(&self) -> isize {
@@ -417,6 +472,18 @@ pub fn gen_syscalls(input: TokenStream) -> TokenStream {
             Self::#names(args) => args.syscall_number(),
           )*
           Self::Unknown(args) => args.syscall_number(),
+        }
+      }
+    }
+
+    impl #crate_token::SyscallGroupsGetter for SyscallArgs {
+      #[inline(always)]
+      fn syscall_groups(&self) -> ::enumflags2::BitFlags<#crate_token::SyscallGroups> {
+        match self {
+          #(
+            Self::#names(args) => args.syscall_groups(),
+          )*
+          Self::Unknown(args) => args.syscall_groups(),
         }
       }
     }
