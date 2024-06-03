@@ -9,7 +9,8 @@ use std::{
 use nix::{
   errno::Errno,
   libc::{
-    c_long, clone_args, epoll_event, iocb, itimerval, mq_attr, msqid_ds, rlimit, rusage, sigevent, sigset_t, sockaddr, stat, statfs, timespec, timeval, timex
+    c_long, clone_args, epoll_event, iocb, itimerval, mq_attr, msqid_ds, open_how, rlimit, rusage,
+    sigevent, sigset_t, sockaddr, stat, statfs, timespec, timeval, timex,
   },
   sys::ptrace::{self, AddressType},
   unistd::Pid,
@@ -18,7 +19,9 @@ use nix::{
 use crate::{
   arch::PtraceRegisters,
   types::{
-    __aio_sigset, __mount_arg, cap_user_data, cap_user_header, futex_waitv, io_event, io_uring_params, kexec_segment, landlock_ruleset_attr, linux_dirent, linux_dirent64, mount_attr, timezone
+    __aio_sigset, __mount_arg, cap_user_data, cap_user_header, futex_waitv, io_event,
+    io_uring_params, kexec_segment, landlock_ruleset_attr, linux_dirent, linux_dirent64,
+    mount_attr, timezone,
   },
 };
 
@@ -335,6 +338,12 @@ impl InspectFromPid for Result<mount_attr, InspectError> {
 }
 
 impl InspectFromPid for Result<mq_attr, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+impl InspectFromPid for Result<open_how, InspectError> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }

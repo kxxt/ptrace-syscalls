@@ -622,6 +622,7 @@ fn wrap_syscall_arg_type(
         | "iocb"
         | "io_event"
         | "io_uring_params"
+        | "open_how"
         | "landlock_ruleset_attr"
         | "mq_attr"
         | "sigevent"

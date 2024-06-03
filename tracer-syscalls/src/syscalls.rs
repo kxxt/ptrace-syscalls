@@ -17,7 +17,7 @@ use nix::libc::{
   c_char, c_long, c_uchar, c_uint, c_ulong, c_void, clockid_t, clone_args, dev_t, epoll_event,
   gid_t, id_t, iocb, itimerspec, itimerval, key_t, mode_t, mq_attr, mqd_t, msqid_ds, off_t, pid_t,
   rlimit, rusage, sigevent, sigset_t, size_t, sockaddr, socklen_t, ssize_t, stat, statfs, timespec,
-  timeval, timex, uid_t,
+  timeval, timex, uid_t, open_how
 };
 use nix::sys::ptrace::AddressType;
 use nix::unistd::Pid;
@@ -490,6 +490,26 @@ gen_syscalls! {
   newfstatat(dirfd: RawFd, pathname: *const c_char, statbuf: *mut stat, flags: c_int) /
     { dirfd: RawFd, pathname: PathBuf, flags: c_int } -> c_int + { statbuf: stat }
     ~ [Desc, File, FStat, StatLike] for [x86_64: 262, aarch64: 79, riscv64: 79],
+  // nice
+  // old_adjtimex
+  // oldfstat
+  // oldlstat
+  // oldolduname
+  // oldstat
+  // oldumount
+  // olduname
+  open(pathname: *const c_char, flags: c_int, mode: mode_t) / { pathname: PathBuf, flags: c_int, mode: mode_t } -> RawFd
+    ~ [Desc, File] for [x86_64: 2, aarch64: 56, riscv64: 56],
+  open_by_handle_at(mount_fd: RawFd, handle: *mut c_void, flags: c_int) /
+    { mount_fd: RawFd, handle: Vec<u8>, flags: c_int } -> RawFd ~ [Desc] for [x86_64: 304, aarch64: 265, riscv64: 265],
+  open_tree(dirfd: RawFd, path: *const c_char, flags: c_uint) / { dirfd: RawFd, path: PathBuf, flags: c_uint } -> c_int
+    ~ [Desc, File] for [x86_64: 428, aarch64: 428, riscv64: 428],
+  openat(dirfd: RawFd, pathname: *const c_char, flags: c_int, mode: mode_t) /
+    { dirfd: RawFd, pathname: PathBuf, flags: c_int, mode: mode_t } -> RawFd ~ [Desc, File] for [x86_64: 257, aarch64: 56, riscv64: 56],
+  openat2(dirfd: RawFd, pathname: *const c_char, how: *mut open_how, size: size_t) /
+    { dirfd: RawFd, pathname: PathBuf, how: open_how, size: size_t } -> c_int ~ [Desc, File] for [x86_64: 437, aarch64: 437, riscv64: 437],
+  // or1k_atomic
+  // osf_*
 }
 
 // pub use cfg_if_has_syscall;
