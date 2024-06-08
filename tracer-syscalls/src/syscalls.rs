@@ -576,7 +576,7 @@ gen_syscalls! {
   pwritev(fd: RawFd, iov: *const iovec, iovcnt: c_int, offset: off_t) /
     { fd: RawFd, iov: Vec<iovec>, offset: off_t } -> ssize_t ~ [Desc] for [x86_64: 296, aarch64: 70, riscv64: 70],
   pwritev2(fd: RawFd, iov: *const iovec, iovcnt: c_int, offset: off_t, flags: c_int) /
-    { fd: RawFd, iov: Vec<iovec>, offset: off_t, flags: c_int } -> ssize_t ~ [Desc] for [x86_64: 328, aarch64: 287, riscv64: 287],
+    { fd: RawFd, iov: Vec<iovec> @ counted_by(iovcnt), offset: off_t, flags: c_int } -> ssize_t ~ [Desc] for [x86_64: 328, aarch64: 287, riscv64: 287],
 }
 
 // pub use cfg_if_has_syscall;

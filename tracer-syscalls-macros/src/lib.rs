@@ -5,13 +5,13 @@ use proc_macro_crate::{crate_name, FoundCrate};
 use quote::{format_ident, quote, ToTokens};
 use syn::{
   braced, bracketed, parenthesized, parse::Parse, parse_macro_input, punctuated::Punctuated,
-  spanned::Spanned, token, Field, Ident, PathArguments, Token, Type, TypePath,
+  spanned::Spanned, token, Expr, Field, Ident, PathArguments, Token, Type, TypePath,
 };
 
 struct ModifiedArgsExpr {
   plus: Token![+],
   brace_token: token::Brace,
-  args: Punctuated<Field, Token![,]>,
+  args: Punctuated<ArgField, Token![,]>,
 }
 
 impl Parse for ModifiedArgsExpr {
@@ -20,7 +20,53 @@ impl Parse for ModifiedArgsExpr {
     Ok(Self {
       plus: input.parse()?,
       brace_token: braced!(content in input),
-      args: content.parse_terminated(Field::parse_named, Token![,])?,
+      args: content.parse_terminated(ArgField::parse, Token![,])?,
+    })
+  }
+}
+
+struct Decoder {
+  at: Token![@],
+  func: Ident,
+  paren_token: token::Paren,
+  args: Punctuated<Expr, Token![,]>,
+}
+
+impl Parse for Decoder {
+  fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+    let content;
+    Ok(Self {
+      at: input.parse()?,
+      func: input.parse()?,
+      paren_token: parenthesized!(content in input),
+      args: content.parse_terminated(Expr::parse, Token![,])?,
+    })
+  }
+}
+
+struct ArgField {
+  ident: Ident,
+  colon_token: Token![:],
+  ty: Type,
+  decoder: Option<Decoder>,
+}
+
+impl Parse for ArgField {
+  fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+    let ident = input.parse()?;
+    let colon_token = input.parse()?;
+    let ty = input.parse()?;
+    let lookahead = input.lookahead1();
+    let decoder = if lookahead.peek(Token![@]) {
+      Some(input.parse()?)
+    } else {
+      None
+    };
+    Ok(Self {
+      ident,
+      colon_token,
+      ty,
+      decoder,
     })
   }
 }
@@ -28,10 +74,10 @@ impl Parse for ModifiedArgsExpr {
 struct SyscallEntry {
   name: syn::Ident,
   paren_token: token::Paren,
-  raw_args: Punctuated<Field, Token![,]>,
+  raw_args: Punctuated<ArgField, Token![,]>,
   separator: Token![/],
   brace_token: token::Brace,
-  args: Punctuated<Field, Token![,]>,
+  args: Punctuated<ArgField, Token![,]>,
   arrow: Token![->],
   result: Ident,
   modified_args: Option<ModifiedArgsExpr>,
@@ -52,10 +98,10 @@ impl Parse for SyscallEntry {
     Ok(SyscallEntry {
       name: input.parse()?,
       paren_token: parenthesized!(raw_args in input),
-      raw_args: raw_args.parse_terminated(Field::parse_named, Token![,])?,
+      raw_args: raw_args.parse_terminated(ArgField::parse, Token![,])?,
       separator: input.parse()?,
       brace_token: braced!(content in input),
-      args: content.parse_terminated(Field::parse_named, Token![,])?,
+      args: content.parse_terminated(ArgField::parse, Token![,])?,
       arrow: input.parse()?,
       result: input.parse()?,
       modified_args: {
@@ -160,7 +206,7 @@ fn gen_syscall_args_struct(
       .position(|x| x.ident == arg.ident)
       .unwrap();
     let arg_name = &arg.ident;
-    arg_names.push(arg_name.clone().unwrap());
+    arg_names.push(arg_name.clone());
     let arg_type = &arg.ty;
     let (wrapped_arg_type, need_memory_inspection) =
       wrap_syscall_arg_type(arg_type, crate_token.clone());
@@ -183,7 +229,7 @@ fn gen_syscall_args_struct(
   let mut inspect_raw_args = vec![];
   for (i, raw_arg) in syscall.raw_args.iter().enumerate() {
     let arg_name = &raw_arg.ident;
-    raw_arg_names.push(arg_name.clone().unwrap());
+    raw_arg_names.push(arg_name.clone());
     let arg_type = &raw_arg.ty;
     raw_arg_types.push(arg_type.clone());
     let literal_i = syn::LitInt::new(&i.to_string(), arg_type.span());
@@ -212,7 +258,7 @@ fn gen_syscall_args_struct(
         .position(|x| x.ident == modified_arg.ident)
         .unwrap();
       let arg_name = &modified_arg.ident;
-      modified_arg_names.push(arg_name.clone().unwrap());
+      modified_arg_names.push(arg_name.clone());
       let arg_type = &modified_arg.ty;
       let (wrapped_arg_type, need_memory_inspection) =
         wrap_syscall_arg_type(arg_type, crate_token.clone());
