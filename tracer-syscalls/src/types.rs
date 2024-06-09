@@ -200,3 +200,26 @@ pub struct mount_attr {
   propagation: u64,
   userns_fd: u64,
 }
+
+pub type qid_t = c_uint;
+
+#[cfg(target_arch = "riscv64")]
+#[derive(Debug, Clone, PartialEq)]
+#[repr(C)]
+pub struct riscv_hwprobe {
+  key: i64,
+  value: u64,
+}
+
+#[derive(Debug, PartialEq)]
+#[repr(C)] 
+// aligned(4 * sizeof(__u64)) as a tracer we are not interested in the alignment
+pub struct rseq {
+  cpu_id_start: u32,
+  cpu_id: u32,
+  rseq_cs: u64,
+  flags: u32,
+  node_id: u32,
+  mm_cid: u32,
+  end: [c_char]
+}

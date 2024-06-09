@@ -3,15 +3,13 @@ use std::{
   ffi::{CString, OsString},
   mem::size_of,
   os::unix::prelude::OsStringExt,
-  path::PathBuf,
+  path::PathBuf, sync::Arc,
 };
 
 use nix::{
   errno::Errno,
   libc::{
-    c_long, clone_args, epoll_event, fd_set, iocb, iovec, itimerval, mq_attr, msqid_ds, open_how,
-    pollfd, rlimit, rlimit64, rusage, sigevent, siginfo_t, sigset_t, sockaddr, stat, statfs,
-    timespec, timeval, timex,
+    c_long, epoll_event, fd_set, iocb, iovec, itimerval, mmsghdr, mq_attr, msghdr, msqid_ds, open_how, pollfd, rlimit, rlimit64, rusage, sigaction, sigevent, siginfo_t, sigset_t, sockaddr, stat, statfs, timespec, timeval, timex
   },
   sys::ptrace::{self, AddressType},
   unistd::Pid,
@@ -20,9 +18,7 @@ use nix::{
 use crate::{
   arch::PtraceRegisters,
   types::{
-    __aio_sigset, __mount_arg, cap_user_data, cap_user_header, futex_waitv, io_event,
-    io_uring_params, kexec_segment, landlock_ruleset_attr, linux_dirent, linux_dirent64,
-    mount_attr, timezone,
+    __aio_sigset, __mount_arg, cap_user_data, cap_user_header, futex_waitv, io_event, io_uring_params, kexec_segment, landlock_ruleset_attr, linux_dirent, linux_dirent64, mount_attr, rseq, timezone
   },
 };
 
@@ -172,7 +168,7 @@ impl InspectFromPid for Result<timespec, InspectError> {
   }
 }
 
-impl InspectFromPid for Result<clone_args, InspectError> {
+impl InspectFromPid for Result<nix::libc::clone_args, InspectError> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
@@ -202,7 +198,20 @@ impl InspectFromPid for Result<u32, InspectError> {
   }
 }
 
+impl InspectFromPid for Result<Arc<rseq>, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+
 impl InspectFromPid for Result<i32, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+impl InspectFromPid for Result<sigaction, InspectError> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
@@ -387,6 +396,25 @@ impl InspectFromPid for Result<msqid_ds, InspectError> {
 }
 
 impl InspectFromPid for Result<sigevent, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+impl InspectFromPid for Result<mmsghdr, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+impl InspectFromPid for Result<msghdr, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+#[cfg(target_arch = "riscv64")]
+impl InspectFromPid for Result<crate::types::riscv_hwprobe, InspectError> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }

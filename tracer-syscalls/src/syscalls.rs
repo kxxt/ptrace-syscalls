@@ -15,12 +15,14 @@ use crate::{SyscallGroups, SyscallGroupsGetter};
 use enumflags2::BitFlags;
 use nix::libc::{
   c_char, c_long, c_uchar, c_uint, c_ulong, c_void, clockid_t, clone_args, dev_t, epoll_event,
-  gid_t, id_t, iocb, itimerspec, itimerval, key_t, mode_t, mq_attr, mqd_t, msqid_ds, nfds_t, off_t,
-  open_how, pid_t, pollfd, rlimit, rusage, sigevent, siginfo_t, sigset_t, size_t, sockaddr,
-  socklen_t, ssize_t, stat, statfs, timespec, timeval, timex, uid_t, loff_t, iovec, rlimit64, fd_set
+  fd_set, gid_t, id_t, iocb, iovec, itimerspec, itimerval, key_t, loff_t, mmsghdr, mode_t, mq_attr,
+  mqd_t, msghdr, msqid_ds, nfds_t, off_t, open_how, pid_t, pollfd, rlimit, rlimit64, rusage,
+  sigaction, sigevent, siginfo_t, sigset_t, size_t, sockaddr, socklen_t, ssize_t, stat, statfs,
+  timespec, timeval, timex, uid_t,
 };
 use nix::sys::ptrace::AddressType;
 use nix::unistd::Pid;
+use std::sync::Arc;
 use tracer_syscalls_macros::gen_syscalls;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -572,11 +574,87 @@ gen_syscalls! {
   ptrace(request: c_int, pid: pid_t, addr: *mut c_void, data: *mut c_void) / { } -> c_long
     ~ [] for [x86_64: 101, aarch64: 117, riscv64: 117],
   pwrite64(fd: RawFd, buf: *const c_void, count: size_t, offset: loff_t) /
-    { fd: RawFd, buf: Vec<u8>, count: size_t, offset: loff_t } -> ssize_t ~ [Desc] for [x86_64: 18, aarch64: 68, riscv64: 68],
+    { fd: RawFd, buf: Vec<u8> @ counted_by(count), count: size_t, offset: loff_t } -> ssize_t ~ [Desc] for [x86_64: 18, aarch64: 68, riscv64: 68],
   pwritev(fd: RawFd, iov: *const iovec, iovcnt: c_int, offset: off_t) /
-    { fd: RawFd, iov: Vec<iovec>, offset: off_t } -> ssize_t ~ [Desc] for [x86_64: 296, aarch64: 70, riscv64: 70],
+    { fd: RawFd, iov: Vec<iovec> @ counted_by(iovcnt), offset: off_t } -> ssize_t ~ [Desc] for [x86_64: 296, aarch64: 70, riscv64: 70],
   pwritev2(fd: RawFd, iov: *const iovec, iovcnt: c_int, offset: off_t, flags: c_int) /
     { fd: RawFd, iov: Vec<iovec> @ counted_by(iovcnt), offset: off_t, flags: c_int } -> ssize_t ~ [Desc] for [x86_64: 328, aarch64: 287, riscv64: 287],
+  quotactl(cmd: c_int, special: *const c_char, id: qid_t, addr: AddressType) /
+    { cmd: c_int, special: Option<CString>, id: qid_t } -> c_int ~ [File] for [x86_64: 179, aarch64: 60, riscv64: 60],
+  quotactl_fd(fd: RawFd, cmd: c_int, id: c_int, addr: AddressType) / { fd: RawFd, cmd: c_int, id: c_int } -> c_int
+    ~ [Desc] for [x86_64: 443, aarch64: 443, riscv64: 443],
+  read(fd: RawFd, buf: *mut c_void, count: size_t) / { fd: RawFd, count: size_t } -> ssize_t + { buf: Vec<u8> @ on_success_counted_by(syscall_result) }
+    ~ [Desc] for [x86_64: 0, aarch64: 63, riscv64: 63],
+  readahead(fd: RawFd, offset: off_t, count: size_t) / { fd: RawFd, offset: off_t, count: size_t } -> ssize_t
+    ~ [Desc] for [x86_64: 187, aarch64: 213, riscv64: 213],
+  // readdir(fd: RawFd, dirp: AddressType, count: c_uint) / { fd: RawFd, count: c_uint } -> c_int + { dirp: Vec<u8> } ~ [Desc] for [],
+  readlink(pathname: *const c_char, buf: *mut c_char, bufsiz: size_t) / { pathname: PathBuf, bufsiz: size_t } -> ssize_t
+    + { buf: Vec<u8> @ on_success_counted_by(syscall_result) } ~ [File] for [x86_64: 89],
+  readlinkat(dirfd: RawFd, pathname: *const c_char, buf: *mut c_char, bufsiz: size_t) /
+    { dirfd: RawFd, pathname: PathBuf, bufsiz: size_t } -> ssize_t + { buf: Vec<u8> @ on_success_counted_by(syscall_result) }
+    ~ [Desc, File] for [x86_64: 267, aarch64: 78, riscv64: 78],
+  readv(fd: RawFd, iov: *const iovec, iovcnt: c_int) / { fd: RawFd, iov: Vec<iovec> @ counted_by(iovcnt) } -> ssize_t
+    ~ [Desc] for [x86_64: 19, aarch64: 65, riscv64: 65],
+  reboot(magic: c_int, magic2: c_int, cmd: c_int, arg: *mut c_void) / { magic: c_int, magic2: c_int, cmd: c_int } -> c_int
+    ~ [] for [x86_64: 169, aarch64: 142, riscv64: 142],
+  //  recv
+  recvfrom(sockfd: RawFd, buf: *mut c_void, len: size_t, flags: c_int, src_addr: *mut sockaddr, addrlen: *mut socklen_t) /
+    { sockfd: RawFd, len: size_t, flags: c_int, src_addr: Option<sockaddr> } -> ssize_t + { buf: Vec<u8> @ on_success_counted_by(syscall_result) }
+    ~ [Network] for [x86_64: 45, aarch64: 207, riscv64: 207],
+  recvmmsg(sockfd: RawFd, msgvec: *mut mmsghdr, vlen: c_uint, flags: c_int, timeout: *mut timespec) /
+    { sockfd: RawFd, vlen: c_uint, flags: c_int, msgvec: Vec<mmsghdr> @ counted_by(vlen), timeout: Option<timespec> } -> c_int
+    ~ [Network] for [x86_64: 299, aarch64: 243, riscv64: 243],
+  // recvmmsg_time64
+  recvmsg(sockfd: RawFd, msg: *mut msghdr, flags: c_int) / { sockfd: RawFd, flags: c_int, msg: msghdr } -> ssize_t + { msg: msghdr }
+    ~ [Network] for [x86_64: 47, aarch64: 212, riscv64: 212],
+  remap_file_pages(addr: *mut c_void, size: size_t, prot: c_int, pgoff: size_t, flags: c_int) /
+    { addr: AddressType, size: size_t, prot: c_int, pgoff: size_t, flags: c_int } -> c_int
+    ~ [Memory] for [x86_64: 216, aarch64: 234, riscv64: 234],
+  removexattr(path: *const c_char, name: *const c_char) / { path: PathBuf, name: CString } -> c_int
+    ~ [File] for [x86_64: 197, aarch64: 14, riscv64: 14],
+  rename(oldpath: *const c_char, newpath: *const c_char) / { oldpath: PathBuf, newpath: PathBuf } -> c_int
+    ~ [File] for [x86_64: 82],
+  renameat(olddirfd: RawFd, oldpath: *const c_char, newdirfd: RawFd, newpath: *const c_char) /
+    { olddirfd: RawFd, oldpath: PathBuf, newdirfd: RawFd, newpath: PathBuf } -> c_int
+    ~ [Desc, File] for [x86_64: 264, aarch64: 38],
+  renameat2(olddirfd: RawFd, oldpath: *const c_char, newdirfd: RawFd, newpath: *const c_char, flags: c_uint) /
+    { olddirfd: RawFd, oldpath: PathBuf, newdirfd: RawFd, newpath: PathBuf, flags: c_uint } -> c_int
+    ~ [Desc, File] for [x86_64: 316, aarch64: 276, riscv64: 276],
+  request_key(r#type: *const c_char, description: *const c_char, callout_info: *const c_char, dest_keyring: key_serial_t) /
+    { r#type: CString, description: CString, callout_info: Option<CString>, dest_keyring: key_serial_t } -> key_serial_t
+    ~ [] for [x86_64: 249, aarch64: 218, riscv64: 218],
+  restart_syscall() / {} -> c_long ~ [] for [x86_64: 219, aarch64: 128, riscv64: 128],
+  riscv_flush_icache(start: *mut c_void, end: *mut c_void, flags: c_ulong) / { start: AddressType, end: AddressType, flags: c_ulong } -> c_int
+    ~ [Memory] for [riscv64: 259],
+  // https://docs.kernel.org/6.5/riscv/hwprobe.html
+  riscv_hwprobe(pairs: *mut riscv_hwprobe, pair_count: size_t, cpu_count: size_t, cpus: *mut c_ulong, flags: c_uint) /
+    { pairs: Vec<riscv_hwprobe>, pair_count: size_t, cpu_count: size_t, cpus: Vec<c_ulong>, flags: c_uint }
+    -> c_int + { pairs: Vec<riscv_hwprobe> }
+    ~ [] for [riscv64: 258],
+  rmdir(pathname: *const c_char) / { pathname: PathBuf } -> c_int ~ [File] for [x86_64: 84],
+  rseq(rseq: *mut c_void, rseq_len: u32, flags: c_int, sig: u32) / { rseq: Arc<rseq>, rseq_len: u32, flags: c_int, sig: u32 } -> c_int
+    ~ [] for [x86_64: 334, aarch64: 293, riscv64: 293],
+  rt_sigaction(sig: c_int, act: *const sigaction, oact: *mut sigaction, sigsetsize: size_t) /
+    { sig: c_int, act: Option<sigaction>, oact: Option<sigaction>, sigsetsize: size_t } -> c_int + { oact: Option<sigaction> }
+    ~ [Signal] for [x86_64: 13, aarch64: 134, riscv64: 134],
+  rt_sigpending(set: *mut sigset_t, sigsetsize: size_t) / { set: sigset_t, sigsetsize: size_t } -> c_int
+    ~ [Signal] for [x86_64: 127, aarch64: 136, riscv64: 136],
+  rt_sigprocmask(how: c_int, set: *const sigset_t, oldset: *mut sigset_t, sigsetsize: size_t) /
+    { how: c_int, set: Option<sigset_t>, oldset: Option<sigset_t>, sigsetsize: size_t } -> c_int + { oldset: Option<sigset_t> }
+    ~ [Signal] for [x86_64: 14, aarch64: 135, riscv64: 135],
+  rt_sigqueueinfo(pid: pid_t, sig: c_int, info: *mut siginfo_t) / { pid: pid_t, sig: c_int, info: siginfo_t } -> c_int
+    ~ [Signal, Process] for [x86_64: 132, aarch64: 138, riscv64: 138],
+  // TODO: regs is pt_regs struct
+  rt_sigreturn(regs: *mut c_void) / {} -> c_int ~ [Signal] for [x86_64: 15, aarch64: 139, riscv64: 139],
+  rt_sigsuspend(newset: *mut sigset_t, sigsetsize: size_t) /
+    { newset: sigset_t, sigsetsize: size_t } -> c_int ~ [Signal] for [x86_64: 130, aarch64: 133, riscv64: 133],
+  rt_sigtimedwait(set: *const sigset_t, info: *mut siginfo_t, timeout: *const timespec, sigsetsize: size_t) /
+    { set: sigset_t, info: siginfo_t, timeout: timespec, sigsetsize: size_t } -> c_int + { info: Option<siginfo_t> }
+    ~ [Signal] for [x86_64: 128, aarch64: 137, riscv64: 137],
+  // rt_sigtimedwait_time64
+  rt_tgsigqueueinfo(tgid: pid_t, pid: pid_t, sig: c_int, info: *mut siginfo_t) /
+    { tgid: pid_t, pid: pid_t, sig: c_int, info: siginfo_t } -> c_int ~ [Signal, Process] for [x86_64: 297, aarch64: 240, riscv64: 240],
+  // rtas
 }
 
 // pub use cfg_if_has_syscall;

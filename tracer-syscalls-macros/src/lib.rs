@@ -499,6 +499,7 @@ pub fn gen_syscalls(input: TokenStream) -> TokenStream {
       fn syscall_number(&self) -> isize {
         match self {
           #(
+            #[cfg(any(#(target_arch = #supported_archs),*))]
             Self::#names(args) => args.syscall_number(),
           )*
           Self::Unknown(args) => args.syscall_number(),
@@ -511,6 +512,7 @@ pub fn gen_syscalls(input: TokenStream) -> TokenStream {
       fn syscall_groups(&self) -> ::enumflags2::BitFlags<#crate_token::SyscallGroups> {
         match self {
           #(
+            #[cfg(any(#(target_arch = #supported_archs),*))]
             Self::#names(args) => args.syscall_groups(),
           )*
           Self::Unknown(args) => args.syscall_groups(),
@@ -523,6 +525,7 @@ pub fn gen_syscalls(input: TokenStream) -> TokenStream {
       fn syscall_number(&self) -> isize {
         match self {
           #(
+            #[cfg(any(#(target_arch = #supported_archs),*))]
             Self::#names(args) => args.syscall_number(),
           )*
           Self::Unknown(args) => args.syscall_number(),
@@ -535,6 +538,7 @@ pub fn gen_syscalls(input: TokenStream) -> TokenStream {
       fn syscall_groups(&self) -> ::enumflags2::BitFlags<#crate_token::SyscallGroups> {
         match self {
           #(
+            #[cfg(any(#(target_arch = #supported_archs),*))]
             Self::#names(args) => args.syscall_groups(),
           )*
           Self::Unknown(args) => args.syscall_groups(),
@@ -547,6 +551,7 @@ pub fn gen_syscalls(input: TokenStream) -> TokenStream {
         use #crate_token::arch::syscall_no_from_regs;
         match syscall_no_from_regs!(regs) as isize {
           #(
+            #[cfg(any(#(target_arch = #supported_archs),*))]
             #syscall_numbers => {
               Self::#names(#crate_token::FromInspectingRegs::from_inspecting_regs(inspectee_pid, regs))
             },
@@ -563,6 +568,7 @@ pub fn gen_syscalls(input: TokenStream) -> TokenStream {
         use #crate_token::arch::syscall_no_from_regs;
         match syscall_no_from_regs!(regs) as isize {
           #(
+            #[cfg(any(#(target_arch = #supported_archs),*))]
             #syscall_numbers => {
               Self::#names(#crate_token::FromInspectingRegs::from_inspecting_regs(pid, regs))
             },
@@ -644,7 +650,7 @@ fn wrap_syscall_arg_type(
         "RawFd" | "socklen_t" | "c_int" | "c_uint" | "c_ulong" | "c_long" | "i16" | "i32"
         | "i64" | "u64" | "usize" | "isize" | "size_t" | "key_serial_t" | "AddressType"
         | "mode_t" | "uid_t" | "pid_t" | "gid_t" | "off_t" | "u32" | "clockid_t" | "id_t"
-        | "key_t" | "mqd_t" | "aio_context_t" | "dev_t" | "nfds_t" | "loff_t" => {
+        | "key_t" | "mqd_t" | "aio_context_t" | "dev_t" | "nfds_t" | "loff_t" | "qid_t" => {
           (ty.to_token_stream(), false)
         }
         "sockaddr"
@@ -677,7 +683,10 @@ fn wrap_syscall_arg_type(
         | "sigevent"
         | "msqid_ds"
         | "pollfd"
-        | "__mount_arg" => (quote!(Result<#ty, #crate_token::InspectError>), true),
+        | "__mount_arg"
+        | "msghdr"
+        | "riscv_hwprobe" 
+        | "siginfo_t" => (quote!(Result<#ty, #crate_token::InspectError>), true),
         _ => {
           if ty.ident == "Option" {
             let PathArguments::AngleBracketed(arg) = &ty.arguments else {
@@ -687,7 +696,9 @@ fn wrap_syscall_arg_type(
             match arg.as_str() {
               "PathBuf" | "timespec" | "Vec < CString >" | "CString" | "Vec < c_ulong >"
               | "Vec < c_uint >" | "timezone" | "mq_attr" | "siginfo_t" | "sigset_t" | "iovec"
-              | "rlimit64" | "fd_set" => (quote!(Result<#ty, #crate_token::InspectError>), true),
+              | "rlimit64" | "fd_set" | "sockaddr" | "sigaction" => {
+                (quote!(Result<#ty, #crate_token::InspectError>), true)
+              }
               _ => panic!("Unsupported inner syscall arg type: {:?}", arg),
             }
           } else if ty.ident == "Vec" {
@@ -698,13 +709,23 @@ fn wrap_syscall_arg_type(
             match arg.as_str() {
               "c_int" | "u8" | "CString" | "epoll_event" | "futex_waitv" | "c_ulong"
               | "linux_dirent" | "io_event" | "linux_dirent64" | "gid_t" | "AddressType"
-              | "kexec_segment" | "c_uchar" | "u64" | "mount_attr" | "pollfd" | "iovec" => {
+              | "kexec_segment" | "c_uchar" | "u64" | "mount_attr" | "pollfd" | "iovec"
+              | "riscv_hwprobe" | "mmsghdr" => {
                 (quote!(Result<#ty, #crate_token::InspectError>), true)
               }
               _ => panic!("Unsupported inner syscall arg type: {:?}", arg),
             }
           } else if ty.ident == "Result" {
             (quote!(#ty), true)
+          } else if ty.ident == "Arc" {
+            let PathArguments::AngleBracketed(arg) = &ty.arguments else {
+              panic!("Unsupported inner syscall arg type: {:?}", ty_str);
+            };
+            let arg = arg.args.to_token_stream().to_string();
+            match arg.as_str() {
+              "rseq" => (quote!(Result<#ty, #crate_token::InspectError>), true),
+              _ => panic!("Unsupported inner syscall arg type: {:?}", arg),
+            }
           } else {
             panic!("Unsupported syscall arg type: {:?}", ty_str);
           }
