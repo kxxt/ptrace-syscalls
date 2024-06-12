@@ -698,7 +698,7 @@ fn wrap_syscall_arg_type(
             match arg.as_str() {
               "PathBuf" | "timespec" | "Vec < CString >" | "CString" | "Vec < c_ulong >"
               | "Vec < c_uint >" | "timezone" | "mq_attr" | "siginfo_t" | "sigset_t" | "iovec"
-              | "rlimit64" | "fd_set" | "sockaddr" | "sigaction" => {
+              | "rlimit64" | "fd_set" | "sockaddr" | "sigaction" | "timeval" => {
                 (quote!(Result<#ty, #crate_token::InspectError>), true)
               }
               _ => panic!("Unsupported inner syscall arg type: {:?}", arg),
@@ -712,7 +712,7 @@ fn wrap_syscall_arg_type(
               "c_int" | "u8" | "CString" | "epoll_event" | "futex_waitv" | "c_ulong"
               | "linux_dirent" | "io_event" | "linux_dirent64" | "gid_t" | "AddressType"
               | "kexec_segment" | "c_uchar" | "u64" | "mount_attr" | "pollfd" | "iovec"
-              | "riscv_hwprobe" | "mmsghdr" => {
+              | "riscv_hwprobe" | "mmsghdr" | "sembuf" => {
                 (quote!(Result<#ty, #crate_token::InspectError>), true)
               }
               _ => panic!("Unsupported inner syscall arg type: {:?}", arg),

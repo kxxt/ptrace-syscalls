@@ -9,7 +9,7 @@ use std::{
 use nix::{
   errno::Errno,
   libc::{
-    c_long, epoll_event, fd_set, iocb, iovec, itimerval, mmsghdr, mq_attr, msghdr, msqid_ds, open_how, pollfd, rlimit, rlimit64, rusage, sched_attr, sched_param, sigaction, sigevent, siginfo_t, sigset_t, sockaddr, stat, statfs, timespec, timeval, timex
+    c_long, epoll_event, fd_set, iocb, iovec, itimerval, mmsghdr, mq_attr, msghdr, msqid_ds, open_how, pollfd, rlimit, rlimit64, rusage, sched_attr, sched_param, sigaction, sigevent, siginfo_t, sigset_t, sockaddr, stat, statfs, timespec, timeval, timex, sembuf
   },
   sys::ptrace::{self, AddressType},
   unistd::Pid,
@@ -212,6 +212,12 @@ impl InspectFromPid for Result<i32, InspectError> {
 }
 
 impl InspectFromPid for Result<sched_attr, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+impl InspectFromPid for Result<sembuf, InspectError> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }

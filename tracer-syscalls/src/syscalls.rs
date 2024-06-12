@@ -18,7 +18,7 @@ use nix::libc::{
   fd_set, gid_t, id_t, iocb, iovec, itimerspec, itimerval, key_t, loff_t, mmsghdr, mode_t, mq_attr,
   mqd_t, msghdr, msqid_ds, nfds_t, off_t, open_how, pid_t, pollfd, rlimit, rlimit64, rusage,
   sched_attr, sched_param, sigaction, sigevent, siginfo_t, sigset_t, size_t, sockaddr, socklen_t,
-  ssize_t, stat, statfs, timespec, timeval, timex, uid_t,
+  ssize_t, stat, statfs, timespec, timeval, timex, uid_t, sembuf
 };
 use nix::sys::ptrace::AddressType;
 use nix::unistd::Pid;
@@ -432,7 +432,7 @@ gen_syscalls! {
     ~ [] for [x86_64: 154],
   mount(source: *const c_char, target: *const c_char, filesystemtype: *const c_char, mountflags: c_ulong, data: *const c_void) /
     { source: CString, target: PathBuf, filesystemtype: CString, mountflags: c_ulong, data: Option<CString> } -> c_int
-    ~ [File] for [x86_64: 40, aarch64: 165, riscv64: 165],
+    ~ [File] for [x86_64: 165, aarch64: 40, riscv64: 40],
   // mount_setattr: TODO: the mount_attr struct is extensible
   mount_setattr(dirfd: RawFd, pathname: *const c_char, flags: c_uint, attr: *mut mount_attr, size: size_t) /
     { dirfd: RawFd, pathname: PathBuf, flags: c_uint, attr: Vec<mount_attr>, size: size_t } -> c_int
@@ -684,6 +684,36 @@ gen_syscalls! {
     { pid: pid_t, policy: c_int, param: sched_param } -> c_int
     ~ [] for [x86_64: 144, aarch64: 119, riscv64: 119],
   sched_yield() / {} -> c_int ~ [] for [x86_64: 24, aarch64: 124, riscv64: 124],
+  // seccomp: TODO: decode args
+  seccomp(operation: c_int, flags: c_uint, args: *mut c_void) / { operation: c_int, flags: c_uint } -> c_int
+    ~ [] for [x86_64: 317, aarch64: 277, riscv64: 277],
+  select(nfds: c_int, readfds: *mut fd_set, writefds: *mut fd_set, exceptfds: *mut fd_set, timeout: *mut timeval) /
+    { nfds: c_int, readfds: Option<fd_set>, writefds: Option<fd_set>, exceptfds: Option<fd_set>, timeout: Option<timeval> }
+    -> c_int + { readfds: Option<fd_set>, writefds: Option<fd_set>, exceptfds: Option<fd_set> }
+    ~ [Desc] for [x86_64: 23],
+  // semctl: TODO: decode arg
+  semctl(semid: c_int, semnum: c_int, cmd: c_int, arg: *mut c_void) / { semid: c_int, semnum: c_int, cmd: c_int } -> c_int
+    ~ [IPC] for [x86_64: 66, aarch64: 191, riscv64: 191],
+  semget(key: key_t, nsems: c_int, semflg: c_int) / { key: key_t, nsems: c_int, semflg: c_int } -> c_int
+    ~ [IPC] for [x86_64: 64, aarch64: 190, riscv64: 190],
+  semop(semid: c_int, sops: *mut sembuf, nsops: size_t) / { semid: c_int, nsops: c_uint, sops: Vec<sembuf> @ counted_by(nsops) } -> c_int
+    ~ [IPC] for [x86_64: 65, aarch64: 193, riscv64: 193],
+  semtimedop(semid: c_int, sops: *mut sembuf, nsops: size_t, timeout: *const timespec) /
+    { semid: c_int, nsops: c_uint, sops: Vec<sembuf> @ counted_by(nsops), timeout: Option<timespec> } -> c_int
+    ~ [IPC] for [x86_64: 220, aarch64: 192, riscv64: 192],
+  // semtimedop_time64
+  // send
+  sendfile(out_fd: RawFd, in_fd: RawFd, offset: *mut off_t, count: size_t) /
+    { out_fd: RawFd, in_fd: RawFd, offset: off_t, count: size_t } -> ssize_t ~ [Desc, Network] for [x86_64: 40, aarch64: 71, riscv64: 71],
+  // sendfile64
+  sendmmsg(sockfd: RawFd, msgvec: *mut mmsghdr, vlen: c_uint, flags: c_int) /
+    { sockfd: RawFd, vlen: c_uint, flags: c_int, msgvec: Vec<mmsghdr> @ counted_by(vlen) } -> c_int
+    ~ [Network] for [x86_64: 307, aarch64: 269, riscv64: 269],
+  sendmsg(sockfd: RawFd, msg: *const msghdr, flags: c_int) / { sockfd: RawFd, flags: c_int, msg: msghdr } -> ssize_t
+    ~ [Network] for [x86_64: 46, aarch64: 211, riscv64: 211],
+  sendto(sockfd: RawFd, buf: *const c_void, len: size_t, flags: c_int, dest_addr: *const sockaddr, addrlen: socklen_t) /
+    { sockfd: RawFd, buf: Vec<u8> @ counted_by(len), flags: c_int, dest_addr: Option<sockaddr> } -> ssize_t + { }
+    ~ [Network] for [x86_64: 44, aarch64: 206, riscv64: 206],
 }
 
 // pub use cfg_if_has_syscall;
