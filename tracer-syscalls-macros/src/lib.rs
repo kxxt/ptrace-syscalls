@@ -686,7 +686,9 @@ fn wrap_syscall_arg_type(
         | "__mount_arg"
         | "msghdr"
         | "riscv_hwprobe" 
-        | "siginfo_t" => (quote!(Result<#ty, #crate_token::InspectError>), true),
+        | "siginfo_t" 
+        | "sched_attr" 
+        | "sched_param" => (quote!(Result<#ty, #crate_token::InspectError>), true),
         _ => {
           if ty.ident == "Option" {
             let PathArguments::AngleBracketed(arg) = &ty.arguments else {

@@ -17,8 +17,8 @@ use nix::libc::{
   c_char, c_long, c_uchar, c_uint, c_ulong, c_void, clockid_t, clone_args, dev_t, epoll_event,
   fd_set, gid_t, id_t, iocb, iovec, itimerspec, itimerval, key_t, loff_t, mmsghdr, mode_t, mq_attr,
   mqd_t, msghdr, msqid_ds, nfds_t, off_t, open_how, pid_t, pollfd, rlimit, rlimit64, rusage,
-  sigaction, sigevent, siginfo_t, sigset_t, size_t, sockaddr, socklen_t, ssize_t, stat, statfs,
-  timespec, timeval, timex, uid_t,
+  sched_attr, sched_param, sigaction, sigevent, siginfo_t, sigset_t, size_t, sockaddr, socklen_t,
+  ssize_t, stat, statfs, timespec, timeval, timex, uid_t,
 };
 use nix::sys::ptrace::AddressType;
 use nix::unistd::Pid;
@@ -655,6 +655,35 @@ gen_syscalls! {
   rt_tgsigqueueinfo(tgid: pid_t, pid: pid_t, sig: c_int, info: *mut siginfo_t) /
     { tgid: pid_t, pid: pid_t, sig: c_int, info: siginfo_t } -> c_int ~ [Signal, Process] for [x86_64: 297, aarch64: 240, riscv64: 240],
   // rtas
+  // sched_get_affinity
+  sched_get_priority_max(policy: c_int) / { policy: c_int } -> c_int ~ [] for [x86_64: 146, aarch64: 125, riscv64: 125],
+  sched_get_priority_min(policy: c_int) / { policy: c_int } -> c_int ~ [] for [x86_64: 147, aarch64: 126, riscv64: 126],
+  // sched_getaffinity syscall returns (in bytes) the number of bytes placed copied into the mask buffer. arg cpusetsize is also in bytes
+  sched_getaffinity(pid: pid_t, cpusetsize: size_t, mask: *mut c_ulong) /
+    { pid: pid_t, cpusetsize: size_t } -> c_int + { mask: Vec<u8> }
+    ~ [] for [x86_64: 204, aarch64: 123, riscv64: 123],
+  sched_getattr(pid: pid_t, attr: *mut sched_attr, size: c_uint, flags: c_uint) /
+    { pid: pid_t, size: c_uint, flags: c_uint } -> c_int + { attr: sched_attr }
+    ~ [] for [x86_64: 315, aarch64: 275, riscv64: 275],
+  sched_getparam(pid: pid_t, param: *mut sched_param) / { pid: pid_t } -> c_int + { param: sched_param }
+    ~ [] for [x86_64: 143, aarch64: 121, riscv64: 121],
+  sched_getscheduler(pid: pid_t) / { pid: pid_t } -> c_int ~ [] for [x86_64: 145, aarch64: 120, riscv64: 120],
+  sched_rr_get_interval(pid: pid_t, tp: *mut timespec) / { pid: pid_t } -> c_int + { tp: timespec }
+    ~ [] for [x86_64: 148, aarch64: 127, riscv64: 127],
+  // sched_rr_get_interval_time64
+  // sched_set_affinity
+  sched_setaffinity(pid: pid_t, cpusetsize: size_t, mask: *const c_ulong) /
+    { pid: pid_t, cpusetsize: size_t, mask: Vec<u8> } -> c_int
+    ~ [] for [x86_64: 203, aarch64: 122, riscv64: 122],
+  // sched_setattr size is the first field of sched_attr struct
+  sched_setattr(pid: pid_t, attr: *mut sched_attr, flags: c_uint) / { pid: pid_t, attr: sched_attr, flags: c_uint } -> c_int
+    ~ [] for [x86_64: 314, aarch64: 274, riscv64: 274],
+  sched_setparam(pid: pid_t, param: *const sched_param) / { pid: pid_t, param: sched_param } -> c_int
+    ~ [] for [x86_64: 142, aarch64: 118, riscv64: 118],
+  sched_setscheduler(pid: pid_t, policy: c_int, param: *const sched_param) /
+    { pid: pid_t, policy: c_int, param: sched_param } -> c_int
+    ~ [] for [x86_64: 144, aarch64: 119, riscv64: 119],
+  sched_yield() / {} -> c_int ~ [] for [x86_64: 24, aarch64: 124, riscv64: 124],
 }
 
 // pub use cfg_if_has_syscall;
