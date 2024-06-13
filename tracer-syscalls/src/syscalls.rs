@@ -18,7 +18,7 @@ use nix::libc::{
   fd_set, gid_t, id_t, iocb, iovec, itimerspec, itimerval, key_t, loff_t, mmsghdr, mode_t, mq_attr,
   mqd_t, msghdr, msqid_ds, nfds_t, off_t, open_how, pid_t, pollfd, rlimit, rlimit64, rusage,
   sched_attr, sched_param, sigaction, sigevent, siginfo_t, sigset_t, size_t, sockaddr, socklen_t,
-  ssize_t, stat, statfs, timespec, timeval, timex, uid_t, sembuf
+  ssize_t, stat, statfs, timespec, timeval, timex, uid_t, sembuf, stack_t, sysinfo, statx
 };
 use nix::sys::ptrace::AddressType;
 use nix::unistd::Pid;
@@ -771,6 +771,77 @@ gen_syscalls! {
   // setuid32
   setxattr(path: *const c_char, name: *const c_char, value: *const c_void, size: size_t, flags: c_int) /
     { path: PathBuf, name: CString, value: CString, size: size_t, flags: c_int } -> c_int ~ [File] for [x86_64: 188, aarch64: 5, riscv64: 5],
+  // sgetmask
+  shmat(shmid: c_int, shmaddr: *const c_void, shmflg: c_int) / { shmid: c_int, shmaddr: AddressType, shmflg: c_int } -> AddressType
+    ~ [IPC, Memory] for [x86_64: 30, aarch64: 196, riscv64: 196],
+  shmdt(shmaddr: *const c_void) / { shmaddr: AddressType } -> c_int ~ [IPC, Memory] for [x86_64: 67, aarch64: 197, riscv64: 197],
+  shmget(key: key_t, size: size_t, shmflg: c_int) / { key: key_t, size: size_t, shmflg: c_int } -> c_int
+    ~ [IPC] for [x86_64: 29, aarch64: 194, riscv64: 194],
+  shutdown(sockfd: RawFd, how: c_int) / { sockfd: RawFd, how: c_int } -> c_int ~ [Network] for [x86_64: 48, aarch64: 210, riscv64: 210],
+  // sigaction
+  sigaltstack(ss: *const stack_t, old_ss: *mut stack_t) / { ss: Option<stack_t> } -> c_int + { old_ss: Option<stack_t> }
+    ~ [Signal] for [x86_64: 131, aarch64: 132, riscv64: 132],
+  // signal
+  signalfd(fd: RawFd, mask: *const sigset_t, size: size_t) / { fd: RawFd, mask: sigset_t, size: size_t } -> c_int
+    ~ [Desc, Signal] for [x86_64: 282],
+  signalfd4(fd: RawFd, mask: *const sigset_t, size: size_t, flags: c_int) / { fd: RawFd, mask: sigset_t, size: size_t, flags: c_int } -> c_int
+    ~ [Desc, Signal] for [x86_64: 289, aarch64: 74, riscv64: 74],
+  // sigpending
+  // sigprocmask
+  // sigreturn
+  // sigsuspend
+  socket(domain: c_int, r#type: c_int, protocol: c_int) / { domain: c_int, r#type: c_int, protocol: c_int } -> RawFd
+    ~ [Network] for [x86_64: 41, aarch64: 198, riscv64: 198],
+  // socketcall
+  socketpair(domain: c_int, r#type: c_int, protocol: c_int, sv: *mut RawFd) /
+    { domain: c_int, r#type: c_int, protocol: c_int } -> c_int + { sv: [RawFd;2] }
+    ~ [Network] for [x86_64: 53, aarch64: 199, riscv64: 199],
+  splice(fd_in: RawFd, off_in: *mut off_t, fd_out: RawFd, off_out: *mut off_t, len: size_t, flags: c_uint) /
+    { fd_in: RawFd, off_in: off_t, fd_out: RawFd, off_out: off_t, len: size_t, flags: c_uint } -> ssize_t
+    ~ [Desc] for [x86_64: 275, aarch64: 76, riscv64: 76],
+  // spu_create
+  // spu_run
+  // ssetmask
+  stat(pathname: *const c_char, statbuf: *mut stat) / { pathname: PathBuf } -> c_int + { statbuf: stat }
+    ~ [File, Stat, StatLike] for [x86_64: 4],
+  // stat64
+  statfs(path: *const c_char, buf: *mut statfs) / { path: PathBuf } -> c_int + { buf: statfs }
+    ~ [File, StatFs, StatFsLike] for [x86_64: 137, aarch64: 99, riscv64: 99],
+  // statfs64
+  // statmount: TODO
+  statmount(req: *const mnt_id_req, buf: *mut c_void, bufsize: size_t, flags: c_uint) /
+    { req: mnt_id_req, bufsize: size_t, flags: c_uint } -> c_int + { buf: Arc<statmount> }
+    ~ [] for [x86_64: 457, aarch64: 457, riscv64: 457],
+  statx(dirfd: RawFd, pathname: *const c_char, flags: c_int, mask: c_uint, statxbuf: *mut statx) /
+    { dirfd: RawFd, pathname: PathBuf, flags: c_int, mask: c_uint } -> c_int + { statxbuf: statx }
+    ~ [Desc, File, FStat, StatLike] for [x86_64: 332, aarch64: 291, riscv64: 291],
+  // stime
+  // subpage_prot
+  // swapcontext
+  swapoff(path: *const c_char) / { path: PathBuf } -> c_int ~ [File] for [x86_64: 168, aarch64: 255, riscv64: 255],
+  swapon(path: *const c_char, swapflags: c_int) / { path: PathBuf, swapflags: c_int } -> c_int
+    ~ [File] for [x86_64: 167, aarch64: 224, riscv64: 224],
+  // switch_endian
+  symlink(target: *const c_char, linkpath: *const c_char) / { target: PathBuf, linkpath: PathBuf } -> c_int
+    ~ [File] for [x86_64: 88],
+  symlinkat(target: *const c_char, newdirfd: RawFd, linkpath: *const c_char) /
+    { target: PathBuf, newdirfd: RawFd, linkpath: PathBuf } -> c_int
+    ~ [Desc, File] for [x86_64: 266, aarch64: 36, riscv64: 36],
+  // TODO: sync always returns 0
+  sync() / {} -> c_int ~ [] for [x86_64: 162, aarch64: 81, riscv64: 81],
+  sync_file_range(fd: RawFd, offset: off_t, nbytes: off_t, flags: c_uint) /
+    { fd: RawFd, offset: off_t, nbytes: off_t, flags: c_uint } -> c_int
+    ~ [Desc] for [x86_64: 277, aarch64: 84, riscv64: 84],
+  // sync_file_range2
+  syncfs(fd: RawFd) / { fd: RawFd } -> c_int ~ [Desc] for [x86_64: 306, aarch64: 267, riscv64: 267],
+  // sys_debug_setcontext
+  // syscall
+  sysfs(option: c_int, arg1: c_ulong, arg2: c_ulong) / { option: c_int, arg1: c_ulong, arg2: c_ulong } -> c_int
+    ~ [] for [x86_64: 139],
+  sysinfo(info: *mut sysinfo) / { } -> c_int + { info: sysinfo } ~ [] for [x86_64: 99, aarch64: 179, riscv64: 179],
+  syslog(typ: c_int, buf: *const c_char, len: c_int) / { typ: c_int, buf: CString, len: c_int } -> c_int
+    ~ [] for [x86_64: 103, aarch64: 116, riscv64: 116],
+  // sysmips
 }
 
 // pub use cfg_if_has_syscall;

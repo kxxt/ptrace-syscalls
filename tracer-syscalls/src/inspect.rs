@@ -3,13 +3,17 @@ use std::{
   ffi::{CString, OsString},
   mem::size_of,
   os::unix::prelude::OsStringExt,
-  path::PathBuf, sync::Arc,
+  path::PathBuf,
+  sync::Arc,
 };
 
 use nix::{
   errno::Errno,
   libc::{
-    c_long, epoll_event, fd_set, iocb, iovec, itimerval, mmsghdr, mq_attr, msghdr, msqid_ds, open_how, pollfd, rlimit, rlimit64, rusage, sched_attr, sched_param, sigaction, sigevent, siginfo_t, sigset_t, sockaddr, stat, statfs, timespec, timeval, timex, sembuf
+    c_long, epoll_event, fd_set, iocb, iovec, itimerval, mmsghdr, mq_attr, msghdr, msqid_ds,
+    open_how, pollfd, rlimit, rlimit64, rusage, sched_attr, sched_param, sembuf, sigaction,
+    sigevent, siginfo_t, sigset_t, sockaddr, stack_t, stat, statfs, timespec, timeval, timex,
+    statx, sysinfo
   },
   sys::ptrace::{self, AddressType},
   unistd::Pid,
@@ -18,7 +22,7 @@ use nix::{
 use crate::{
   arch::PtraceRegisters,
   types::{
-    __aio_sigset, __mount_arg, cap_user_data, cap_user_header, futex_waitv, io_event, io_uring_params, kexec_segment, landlock_ruleset_attr, linux_dirent, linux_dirent64, mount_attr, rseq, timezone
+    __aio_sigset, __mount_arg, cap_user_data, cap_user_header, futex_waitv, io_event, io_uring_params, kexec_segment, landlock_ruleset_attr, linux_dirent, linux_dirent64, mnt_id_req, mount_attr, rseq, statmount, timezone
   },
 };
 
@@ -168,6 +172,30 @@ impl InspectFromPid for Result<timespec, InspectError> {
   }
 }
 
+impl InspectFromPid for Result<stack_t, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+impl InspectFromPid for Result<mnt_id_req, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+impl InspectFromPid for Result<statx, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+impl InspectFromPid for Result<sysinfo, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
 impl InspectFromPid for Result<nix::libc::clone_args, InspectError> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
@@ -204,6 +232,11 @@ impl InspectFromPid for Result<Arc<rseq>, InspectError> {
   }
 }
 
+impl InspectFromPid for Result<Arc<statmount>, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
 
 impl InspectFromPid for Result<i32, InspectError> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {

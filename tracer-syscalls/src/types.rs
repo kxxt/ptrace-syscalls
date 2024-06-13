@@ -212,7 +212,7 @@ pub struct riscv_hwprobe {
 }
 
 #[derive(Debug, PartialEq)]
-#[repr(C)] 
+#[repr(C)]
 // aligned(4 * sizeof(__u64)) as a tracer we are not interested in the alignment
 pub struct rseq {
   cpu_id_start: u32,
@@ -221,5 +221,40 @@ pub struct rseq {
   flags: u32,
   node_id: u32,
   mm_cid: u32,
-  end: [c_char]
+  end: [c_char],
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[repr(C)]
+pub struct mnt_id_req {
+  size: u32,
+  spare: u32,
+  mnt_id: u64,
+  param: u64,
+}
+
+#[derive(Debug, PartialEq)]
+#[repr(C)]
+pub struct statmount {
+    size: u32,
+    __spare1: u32,
+    mask: u64,
+    sb_dev_major: u32,
+    sb_dev_minor: u32,
+    sb_magic: u64,
+    sb_flags: u32,
+    fs_type: u32,
+    mnt_id: u64,
+    mnt_parent_id: u64,
+    mnt_id_old: u64,
+    mnt_parent_id_old: u64,
+    mnt_attr: u64,
+    mnt_propagation: u64,
+    mnt_peer_group: u64,
+    mnt_master: u64,
+    propagate_from: u64,
+    mnt_root: u32,
+    mnt_point: u32,
+    __spare2: [u64;50],
+    str: [c_char]
 }

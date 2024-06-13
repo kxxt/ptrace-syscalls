@@ -688,7 +688,11 @@ fn wrap_syscall_arg_type(
         | "riscv_hwprobe" 
         | "siginfo_t" 
         | "sched_attr" 
-        | "sched_param" => (quote!(Result<#ty, #crate_token::InspectError>), true),
+        | "sched_param" 
+        | "stack_t"
+        | "mnt_id_req"
+        | "statx"
+        | "sysinfo" => (quote!(Result<#ty, #crate_token::InspectError>), true),
         _ => {
           if ty.ident == "Option" {
             let PathArguments::AngleBracketed(arg) = &ty.arguments else {
@@ -698,7 +702,7 @@ fn wrap_syscall_arg_type(
             match arg.as_str() {
               "PathBuf" | "timespec" | "Vec < CString >" | "CString" | "Vec < c_ulong >"
               | "Vec < c_uint >" | "Vec < gid_t >"| "timezone" | "mq_attr" | "siginfo_t" | "sigset_t" | "iovec"
-              | "rlimit64" | "fd_set" | "sockaddr" | "sigaction" | "timeval" | "itimerval" => {
+              | "rlimit64" | "fd_set" | "sockaddr" | "sigaction" | "timeval" | "itimerval" | "stack_t" => {
                 (quote!(Result<#ty, #crate_token::InspectError>), true)
               }
               _ => panic!("Unsupported inner syscall arg type: {:?}", arg),
@@ -725,7 +729,7 @@ fn wrap_syscall_arg_type(
             };
             let arg = arg.args.to_token_stream().to_string();
             match arg.as_str() {
-              "rseq" => (quote!(Result<#ty, #crate_token::InspectError>), true),
+              "rseq" | "statmount" => (quote!(Result<#ty, #crate_token::InspectError>), true),
               _ => panic!("Unsupported inner syscall arg type: {:?}", arg),
             }
           } else {
