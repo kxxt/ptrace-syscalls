@@ -697,8 +697,8 @@ fn wrap_syscall_arg_type(
             let arg = arg.args.to_token_stream().to_string();
             match arg.as_str() {
               "PathBuf" | "timespec" | "Vec < CString >" | "CString" | "Vec < c_ulong >"
-              | "Vec < c_uint >" | "timezone" | "mq_attr" | "siginfo_t" | "sigset_t" | "iovec"
-              | "rlimit64" | "fd_set" | "sockaddr" | "sigaction" | "timeval" => {
+              | "Vec < c_uint >" | "Vec < gid_t >"| "timezone" | "mq_attr" | "siginfo_t" | "sigset_t" | "iovec"
+              | "rlimit64" | "fd_set" | "sockaddr" | "sigaction" | "timeval" | "itimerval" => {
                 (quote!(Result<#ty, #crate_token::InspectError>), true)
               }
               _ => panic!("Unsupported inner syscall arg type: {:?}", arg),

@@ -714,6 +714,63 @@ gen_syscalls! {
   sendto(sockfd: RawFd, buf: *const c_void, len: size_t, flags: c_int, dest_addr: *const sockaddr, addrlen: socklen_t) /
     { sockfd: RawFd, buf: Vec<u8> @ counted_by(len), flags: c_int, dest_addr: Option<sockaddr> } -> ssize_t + { }
     ~ [Network] for [x86_64: 44, aarch64: 206, riscv64: 206],
+  set_mempolicy(mode: c_int, nodemask: *const c_ulong, maxnode: c_ulong) /
+    { mode: c_int, 
+      nodemask: Vec<c_ulong> @ counted_by( maxnode + (8 * std::mem::size_of::<c_ulong>() - 1) / std::mem::size_of::<c_ulong>() ),
+      maxnode: c_ulong }
+     -> c_int ~ [Memory] for [x86_64: 238, aarch64: 237, riscv64: 237],
+  set_mempolicy_home_node(start: c_ulong, len: c_ulong, home_mode: c_ulong, flags: c_ulong) /
+    { start: c_ulong, len: c_ulong, home_mode: c_ulong, flags: c_ulong }
+    -> c_int ~ [Memory] for [x86_64: 450, aarch64: 450, riscv64: 450],
+  set_robust_list(head: *mut robust_list_head, len: size_t) / { head: AddressType, len: size_t } -> c_long
+    ~ [] for [x86_64: 273, aarch64: 99, riscv64: 99],
+  set_thread_area(u_info: *mut user_desc) / { u_info: user_desc } -> c_int ~ [] for [x86_64: 205],
+  set_tid_address(tidptr: *mut c_int) / { tidptr: AddressType } -> pid_t ~ [] for [x86_64: 218, aarch64: 96, riscv64: 96],
+  // setdomainname: FIXME: name doesn't require terminating null.
+  setdomainname(name: *const c_char, len: size_t) / { name: CString } -> c_int ~ [] for [x86_64: 171, aarch64: 162, riscv64: 162],
+  setfsgid(fsgid: gid_t) / { fsgid: gid_t } -> c_int ~ [Creds] for [x86_64: 123, aarch64: 152, riscv64: 152],
+  // setfsgid32
+  setfsuid(fsuid: uid_t) / { fsuid: uid_t } -> c_int ~ [Creds] for [x86_64: 122, aarch64: 151, riscv64: 151],
+  // setfsuid32
+  setgid(gid: gid_t) / { gid: gid_t } -> c_int ~ [Creds] for [x86_64: 106, aarch64: 144, riscv64: 144],
+  // setgid32
+  setgroups(size: size_t, list: *const gid_t) / { list: Option<Vec<gid_t>> @ counted_by(size) } -> c_int
+    ~ [Creds] for [x86_64: 116, aarch64: 159, riscv64: 159],
+  // setgroups32
+  // sethae
+  // sethostname: FIXME: name doesn't require terminating null.
+  sethostname(name: *const c_char, len: size_t) / { name: CString, len: size_t } -> c_int 
+    ~ [] for [x86_64: 170, aarch64: 161, riscv64: 161],
+  setitimer(which: c_int, new_value: *const itimerval, old_value: *mut itimerval) /
+    { which: c_int, new_value: itimerval, old_value: Option<itimerval> } -> c_int
+    ~ [] for [x86_64: 38, aarch64: 103, riscv64: 103],
+  setns(fd: RawFd, nstype: c_int) / { fd: RawFd, nstype: c_int } -> c_int ~ [Desc] for [x86_64: 308, aarch64: 268, riscv64: 268],
+  setpgid(pid: pid_t, pgid: pid_t) / { pid: pid_t, pgid: pid_t } -> c_int ~ [] for [x86_64: 109, aarch64: 154, riscv64: 154],
+  // setpgrp
+  setpriority(which: c_int, who: id_t, prio: c_int) / { which: c_int, who: id_t, prio: c_int } -> c_int
+    ~ [] for [x86_64: 141, aarch64: 140, riscv64: 140],
+  setregid(rgid: gid_t, egid: gid_t) / { rgid: gid_t, egid: gid_t } -> c_int ~ [Creds] for [x86_64: 114, aarch64: 143, riscv64: 143],
+  // setregid32
+  setresgid(rgid: gid_t, egid: gid_t, sgid: gid_t) / { rgid: gid_t, egid: gid_t, sgid: gid_t } -> c_int
+    ~ [Creds] for [x86_64: 119, aarch64: 149, riscv64: 149],
+  // setresgid32
+  setresuid(ruid: uid_t, euid: uid_t, suid: uid_t) / { ruid: uid_t, euid: uid_t, suid: uid_t } -> c_int
+    ~ [Creds] for [x86_64: 117, aarch64: 147, riscv64: 147],
+  // setresuid32
+  setreuid(ruid: uid_t, euid: uid_t) / { ruid: uid_t, euid: uid_t } -> c_int ~ [Creds] for [x86_64: 113, aarch64: 145, riscv64: 145],
+  // setreuid32
+  setrlimit(resource: c_int, rlim: *const rlimit) / { resource: c_int, rlim: rlimit } -> c_int
+    ~ [] for [x86_64: 160, aarch64: 164, riscv64: 164],
+  setsid() / {} -> pid_t ~ [] for [x86_64: 112, aarch64: 157, riscv64: 157],
+  setsockopt(sockfd: RawFd, level: c_int, optname: c_int, optval: *const c_void, optlen: socklen_t) /
+    { sockfd: RawFd, level: c_int, optname: c_int, optval: Vec<u8> @ counted_by(optlen) } -> c_int
+    ~ [Network] for [x86_64: 54, aarch64: 208, riscv64: 208],
+  settimeofday(tv: *const timeval, tz: *const timezone) / { tv: timeval, tz: Option<timezone> } -> c_int
+    ~ [Clock] for [x86_64: 164, aarch64: 170, riscv64: 170],
+  setuid(uid: uid_t) / { uid: uid_t } -> c_int ~ [Creds] for [x86_64: 105, aarch64: 146, riscv64: 146],
+  // setuid32
+  setxattr(path: *const c_char, name: *const c_char, value: *const c_void, size: size_t, flags: c_int) /
+    { path: PathBuf, name: CString, value: CString, size: size_t, flags: c_int } -> c_int ~ [File] for [x86_64: 188, aarch64: 5, riscv64: 5],
 }
 
 // pub use cfg_if_has_syscall;
