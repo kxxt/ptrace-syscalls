@@ -267,3 +267,20 @@ pub struct ustat {
   f_fname: [c_char; 6],
   f_fpack: [c_char; 6],
 }
+
+#[derive(Debug, Clone, PartialEq)]
+#[repr(C)]
+pub struct cachestat_range {
+  off: u64,
+  len: u64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[repr(C)]
+pub struct cachestat {
+  nr_cache: u64,
+  nr_dirty: u64,
+  nr_writeback: u64,
+  nr_evicted: u64,
+  nr_recently_evicted: u64,
+}

@@ -148,6 +148,7 @@ struct GenSyscallArgsStructResult {
   modified_args_struct_type: Ident,
   archs: Vec<String>,
   syscall_number: Ident,
+  syscall_const_name: Ident,
 }
 
 fn gen_syscall_args_struct(
@@ -413,6 +414,7 @@ fn gen_syscall_args_struct(
     raw_args_struct_type: camel_case_raw_args_type,
     modified_args_struct_type: camel_case_modified_args_type,
     archs: arch_names.clone(),
+    syscall_const_name,
   }
 }
 
@@ -432,6 +434,7 @@ pub fn gen_syscalls(input: TokenStream) -> TokenStream {
   let crate_token = get_crate("tracer-syscalls");
   let mut syscall_names_dedup = vec![];
   let mut supported_archs_dedup = vec![];
+  let mut syscall_consts = vec![];
   for syscall in &input {
     let GenSyscallArgsStructResult {
       args_struct,
@@ -443,6 +446,7 @@ pub fn gen_syscalls(input: TokenStream) -> TokenStream {
       raw_args_struct_type,
       modified_args_struct,
       modified_args_struct_type,
+      syscall_const_name,
     } = gen_syscall_args_struct(syscall, crate_token.clone());
     arg_structs.push(args_struct);
     raw_arg_structs.push(raw_args_struct);
@@ -453,6 +457,7 @@ pub fn gen_syscalls(input: TokenStream) -> TokenStream {
     names.push(name.clone());
     supported_archs.push(archs.clone());
     syscall_numbers.push(syscall_number.clone());
+    syscall_consts.push(syscall_const_name);
     if syscall_names_dedup.last() != Some(&syscall.name) {
       syscall_names_dedup.push(syscall.name.clone());
       supported_archs_dedup.push(archs.clone());
@@ -695,7 +700,10 @@ fn wrap_syscall_arg_type(
         | "itimerspec"
         | "tms"
         | "utsname"
-        | "ustat" => (quote!(Result<#ty, #crate_token::InspectError>), true),
+        | "ustat"
+        | "shmid_ds"
+        | "cachestat"
+        | "cachestat_range" => (quote!(Result<#ty, #crate_token::InspectError>), true),
         _ => {
           if ty.ident == "Option" {
             let PathArguments::AngleBracketed(arg) = &ty.arguments else {

@@ -19,7 +19,7 @@ use nix::libc::{
   mode_t, mq_attr, mqd_t, msghdr, msqid_ds, nfds_t, off_t, open_how, pid_t, pollfd, rlimit,
   rlimit64, rusage, sched_attr, sched_param, sembuf, sigaction, sigevent, siginfo_t, sigset_t,
   size_t, sockaddr, socklen_t, ssize_t, stack_t, stat, statfs, statx, sysinfo, time_t, timer_t,
-  timespec, timeval, timex, tms, uid_t, utsname, utimbuf, idtype_t
+  timespec, timeval, timex, tms, uid_t, utsname, utimbuf, idtype_t, shmid_ds
 };
 use nix::sys::ptrace::AddressType;
 use nix::unistd::Pid;
@@ -87,7 +87,10 @@ gen_syscalls! {
     { cmd: c_int, attr: Vec<u8>, size: c_uint } -> c_int ~ [Desc] for [x86_64: 321, aarch64: 280, riscv64: 280],
   brk(addr: *mut c_void) / { addr: AddressType } -> c_int ~ [Memory] for [x86_64: 12, aarch64: 214, riscv64: 214],
   // cachectl, cacheflush
-  // cachestat { fd: RawFd, cstat_range: cachestat_range, cstat: cachestat, flags: c_uint } ~ [Desc] // TODO: https://github.com/golang/go/issues/61917
+  // cachestat: TODO: https://github.com/golang/go/issues/61917
+  cachestat(fd: RawFd, cstat_range: *mut cachestat_range, cstat: *mut cachestat, flags: c_uint) / 
+    { fd: RawFd, cstat_range: cachestat_range, cstat: cachestat, flags: c_uint } -> c_int
+    ~ [Desc] for [x86_64: 451, aarch64: 451, riscv64: 451],
   capget(hdrp: *mut cap_user_header, datap: *mut cap_user_data) / { } -> c_int +
     { hdrp: cap_user_header, datap: cap_user_data } ~ [Creds] for [x86_64: 125, aarch64: 90, riscv64: 90],
   capset(hdrp: *mut cap_user_header, datap: *const cap_user_data) /
@@ -315,7 +318,7 @@ gen_syscalls! {
   io_cancel(ctx_id: aio_context_t, iocb: *mut iocb, result: *mut io_event) /
     { ctx_id: aio_context_t, iocb: iocb } -> c_int + { result: io_event } ~ [] for [x86_64: 210, aarch64: 3, riscv64: 3],
   // TODO: strace doesn't have io_destory?
-  io_destory(ctx_id: aio_context_t) / { ctx_id: aio_context_t } -> c_int ~ [] for [x86_64: 207, aarch64: 1, riscv64: 1],
+  io_destroy(ctx_id: aio_context_t) / { ctx_id: aio_context_t } -> c_int ~ [] for [x86_64: 207, aarch64: 1, riscv64: 1],
 
   io_getevents(ctx_id: aio_context_t, min_nr: c_long, nr: c_long, events: *mut io_event, timeout: *mut timespec) /
     { ctx_id: aio_context_t, min_nr: c_long, nr: c_long, timeout: Option<timespec> }
@@ -403,10 +406,10 @@ gen_syscalls! {
     { len: c_ulong, mode: c_int, nodemask: Vec<c_ulong>, maxnode: c_ulong, flags: c_uint } -> c_long
     ~ [Memory] for [x86_64: 237, aarch64: 235, riscv64: 235],
   membarrier(cmd: c_int, flags: c_uint, cpu_id: c_int) / { cmd: c_int, flags: c_int, cpu_id: c_int } -> c_int
-    ~ [Memory] for [x86_64: 375, aarch64: 375, riscv64: 375],
+    ~ [Memory] for [x86_64: 324, aarch64: 283, riscv64: 283],
   memfd_create(name: *const c_char, flags: c_uint) / { name: CString, flags: c_uint } -> RawFd
     ~ [Desc] for [x86_64: 319, aarch64: 279, riscv64: 279],
-  memfd_secret(flags: c_uint) / { flags: c_uint } -> RawFd ~ [Desc] for [x86_64: 384, aarch64: 384, riscv64: 384],
+  memfd_secret(flags: c_uint) / { flags: c_uint } -> RawFd ~ [Desc] for [x86_64: 447, aarch64: 447, riscv64: 447],
   // memory_ordering
   // migrate_pages: TODO: what's the size of the Vec
   migrate_pages(pid: pid_t, maxnode: c_ulong, old_nodes: *const c_ulong, new_nodes: *const c_ulong) /
@@ -775,6 +778,8 @@ gen_syscalls! {
   // sgetmask
   shmat(shmid: c_int, shmaddr: *const c_void, shmflg: c_int) / { shmid: c_int, shmaddr: AddressType, shmflg: c_int } -> AddressType
     ~ [IPC, Memory] for [x86_64: 30, aarch64: 196, riscv64: 196],
+  shmctl(shmid: c_int, cmd: c_int, buf: *mut shmid_ds) / { shmid: c_int, cmd: c_int, buf: shmid_ds } -> c_int
+    ~ [IPC] for [x86_64: 31, aarch64: 195, riscv64: 195],
   shmdt(shmaddr: *const c_void) / { shmaddr: AddressType } -> c_int ~ [IPC, Memory] for [x86_64: 67, aarch64: 197, riscv64: 197],
   shmget(key: key_t, size: size_t, shmflg: c_int) / { key: key_t, size: size_t, shmflg: c_int } -> c_int
     ~ [IPC] for [x86_64: 29, aarch64: 194, riscv64: 194],
