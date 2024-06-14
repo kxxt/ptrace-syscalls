@@ -19,7 +19,7 @@ use nix::libc::{
   mode_t, mq_attr, mqd_t, msghdr, msqid_ds, nfds_t, off_t, open_how, pid_t, pollfd, rlimit,
   rlimit64, rusage, sched_attr, sched_param, sembuf, sigaction, sigevent, siginfo_t, sigset_t,
   size_t, sockaddr, socklen_t, ssize_t, stack_t, stat, statfs, statx, sysinfo, time_t, timer_t,
-  timespec, timeval, timex, tms, uid_t, utsname, utimbuf
+  timespec, timeval, timex, tms, uid_t, utsname, utimbuf, idtype_t
 };
 use nix::sys::ptrace::AddressType;
 use nix::unistd::Pid;
@@ -202,7 +202,7 @@ gen_syscalls! {
     { fd: RawFd, list: Option<CString>, size: size_t } -> ssize_t ~ [Desc] for [x86_64: 196, aarch64: 13, riscv64: 13],
   flock(fd: RawFd, operation: c_int) / { fd: RawFd, operation: c_int } -> c_int ~ [Desc] for [x86_64: 73, aarch64: 32, riscv64: 32],
   fork() / {} -> pid_t ~ [Process] for [x86_64: 57],
-  fremovexattr(fd: RawFd, name: *const c_char) / { fd: RawFd, name: CString } -> c_int ~ [Desc] for [x86_64: 196, aarch64: 16, riscv64: 16],
+  fremovexattr(fd: RawFd, name: *const c_char) / { fd: RawFd, name: CString } -> c_int ~ [Desc] for [x86_64: 199, aarch64: 16, riscv64: 16],
   // fsconfig: https://go-review.googlesource.com/c/sys/+/484995 and https://lwn.net/Articles/766155/
   fsconfig(fd: RawFd, cmd: c_uint, key: *const c_char, value: *const c_char, aux: c_int) /
     { fd: RawFd, cmd: c_uint, key: CString, value: CString, aux: c_int } -> c_int ~ [Desc, File] for [x86_64: 431, aarch64: 431, riscv64: 431],
@@ -513,7 +513,7 @@ gen_syscalls! {
     { dirfd: RawFd, pathname: PathBuf, how: open_how, size: size_t } -> c_int ~ [Desc, File] for [x86_64: 437, aarch64: 437, riscv64: 437],
   // or1k_atomic
   // osf_*
-  pause() / {} -> c_int ~ [Signal] for [x86_64: 29, aarch64: 34, riscv64: 34],
+  pause() / {} -> c_int ~ [Signal] for [x86_64: 34],
   // pciconfig_iobase
   // pciconfig_read
   // pciconfig_write
@@ -548,7 +548,7 @@ gen_syscalls! {
     ~ [Clock] for [x86_64: 157, aarch64: 167, riscv64: 167],
   pread64(fd: RawFd, buf: *mut c_void, count: size_t, offset: loff_t) /
     { fd: RawFd, count: size_t, offset: loff_t } -> ssize_t + { buf: Vec<u8> }
-    ~ [Desc] for [x86_64: 67, aarch64: 17, riscv64: 17],
+    ~ [Desc] for [x86_64: 17, aarch64: 67, riscv64: 67],
   preadv(fd: RawFd, iov: *const iovec, iovcnt: c_int, offset: off_t) /
     { fd: RawFd, iov: Vec<iovec>, offset: off_t } -> ssize_t ~ [Desc] for [x86_64: 295, aarch64: 69, riscv64: 69],
   preadv2(fd: RawFd, iov: *const iovec, iovcnt: c_int, offset: off_t, flags: c_int) /
@@ -896,6 +896,24 @@ gen_syscalls! {
   utimes(filename: *const c_char, times: *const timeval) / { filename: PathBuf, times: Option<[timeval; 2]> } -> c_int
     ~ [File] for [x86_64: 235],
   // utrap_install
+  vfork() / {} -> pid_t ~ [Process] for [x86_64: 58],
+  vhangup() / {} -> c_int ~ [] for [x86_64: 153, aarch64: 58, riscv64: 58],
+  // vm86
+  // vm86old
+  vmsplice(fd: RawFd, iov: *const iovec, nr_segs: size_t, flags: c_uint) /
+    { fd: RawFd, iov: Vec<iovec> @ counted_by(nr_segs), flags: c_uint } -> ssize_t
+    ~ [Desc] for [x86_64: 278, aarch64: 75, riscv64: 75],
+  wait4(pid: pid_t, wstatus: *mut c_int, options: c_int, rusage: *mut rusage) /
+    { pid: pid_t, options: c_int } -> pid_t + { wstatus: Result<c_int, InspectError>, rusage: Option<rusage> }
+    ~ [Process] for [x86_64: 61, aarch64: 260, riscv64: 260],
+  waitid(idtype: idtype_t, id: id_t, infop: *mut siginfo_t, options: c_int) /
+    { idtype: idtype_t, id: id_t, options: c_int } -> c_int + { infop: Option<siginfo_t> }
+    ~ [Process] for [x86_64: 247, aarch64: 95, riscv64: 95],
+  // waitpid
+  write(fd: RawFd, buf: *const c_void, count: size_t) / { fd: RawFd, buf: Vec<u8> @ counted_by(count) } -> ssize_t
+    ~ [Desc] for [x86_64: 1, aarch64: 64, riscv64: 64],
+  writev(fd: RawFd, iov: *const iovec, iovcnt: c_int) / { fd: RawFd, iov: Vec<iovec> @ counted_by(iovcnt) } -> ssize_t
+    ~ [Desc] for [x86_64: 20, aarch64: 66, riscv64: 66],
 }
 
 // pub use cfg_if_has_syscall;

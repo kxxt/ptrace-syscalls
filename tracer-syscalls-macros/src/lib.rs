@@ -651,7 +651,7 @@ fn wrap_syscall_arg_type(
         | "i64" | "u64" | "usize" | "isize" | "size_t" | "key_serial_t" | "AddressType"
         | "mode_t" | "uid_t" | "pid_t" | "gid_t" | "off_t" | "u32" | "clockid_t" | "id_t"
         | "key_t" | "mqd_t" | "aio_context_t" | "dev_t" | "nfds_t" | "loff_t" | "qid_t"
-        | "time_t" | "timer_t" => (ty.to_token_stream(), false),
+        | "idtype_t" | "time_t" | "timer_t" => (ty.to_token_stream(), false),
         "sockaddr"
         | "CString"
         | "PathBuf"
@@ -707,7 +707,7 @@ fn wrap_syscall_arg_type(
               | "Vec < c_uint >" | "Vec < gid_t >" | "timezone" | "mq_attr" | "siginfo_t"
               | "sigset_t" | "iovec" | "rlimit64" | "fd_set" | "sockaddr" | "sigaction"
               | "timeval" | "itimerval" | "stack_t" | "timer_t" | "time_t" | "sigevent"
-              | "itimerspec" | "utimbuf" | "[timespec; 2]" | "[timeval; 2]" => {
+              | "itimerspec" | "utimbuf" | "[timespec; 2]" | "[timeval; 2]" | "rusage" => {
                 (quote!(Result<#ty, #crate_token::InspectError>), true)
               }
               _ => panic!("Unsupported inner syscall arg type: {:?}", arg),
