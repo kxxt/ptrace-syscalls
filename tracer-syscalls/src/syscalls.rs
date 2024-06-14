@@ -14,11 +14,12 @@ use crate::{
 use crate::{SyscallGroups, SyscallGroupsGetter};
 use enumflags2::BitFlags;
 use nix::libc::{
-  c_char, c_long, c_uchar, c_uint, c_ulong, c_void, clockid_t, clone_args, dev_t, epoll_event,
-  fd_set, gid_t, id_t, iocb, iovec, itimerspec, itimerval, key_t, loff_t, mmsghdr, mode_t, mq_attr,
-  mqd_t, msghdr, msqid_ds, nfds_t, off_t, open_how, pid_t, pollfd, rlimit, rlimit64, rusage,
-  sched_attr, sched_param, sigaction, sigevent, siginfo_t, sigset_t, size_t, sockaddr, socklen_t,
-  ssize_t, stat, statfs, timespec, timeval, timex, uid_t, sembuf, stack_t, sysinfo, statx
+  c_char, c_long, c_uchar, c_uint, c_ulong, c_void, clock_t, clockid_t, clone_args, dev_t,
+  epoll_event, fd_set, gid_t, id_t, iocb, iovec, itimerspec, itimerval, key_t, loff_t, mmsghdr,
+  mode_t, mq_attr, mqd_t, msghdr, msqid_ds, nfds_t, off_t, open_how, pid_t, pollfd, rlimit,
+  rlimit64, rusage, sched_attr, sched_param, sembuf, sigaction, sigevent, siginfo_t, sigset_t,
+  size_t, sockaddr, socklen_t, ssize_t, stack_t, stat, statfs, statx, sysinfo, time_t, timer_t,
+  timespec, timeval, timex, tms, uid_t, utsname, utimbuf
 };
 use nix::sys::ptrace::AddressType;
 use nix::unistd::Pid;
@@ -643,7 +644,7 @@ gen_syscalls! {
     { how: c_int, set: Option<sigset_t>, oldset: Option<sigset_t>, sigsetsize: size_t } -> c_int + { oldset: Option<sigset_t> }
     ~ [Signal] for [x86_64: 14, aarch64: 135, riscv64: 135],
   rt_sigqueueinfo(pid: pid_t, sig: c_int, info: *mut siginfo_t) / { pid: pid_t, sig: c_int, info: siginfo_t } -> c_int
-    ~ [Signal, Process] for [x86_64: 132, aarch64: 138, riscv64: 138],
+    ~ [Signal, Process] for [x86_64: 129, aarch64: 138, riscv64: 138],
   // TODO: regs is pt_regs struct
   rt_sigreturn(regs: *mut c_void) / {} -> c_int ~ [Signal] for [x86_64: 15, aarch64: 139, riscv64: 139],
   rt_sigsuspend(newset: *mut sigset_t, sigsetsize: size_t) /
@@ -715,7 +716,7 @@ gen_syscalls! {
     { sockfd: RawFd, buf: Vec<u8> @ counted_by(len), flags: c_int, dest_addr: Option<sockaddr> } -> ssize_t + { }
     ~ [Network] for [x86_64: 44, aarch64: 206, riscv64: 206],
   set_mempolicy(mode: c_int, nodemask: *const c_ulong, maxnode: c_ulong) /
-    { mode: c_int, 
+    { mode: c_int,
       nodemask: Vec<c_ulong> @ counted_by( maxnode + (8 * std::mem::size_of::<c_ulong>() - 1) / std::mem::size_of::<c_ulong>() ),
       maxnode: c_ulong }
      -> c_int ~ [Memory] for [x86_64: 238, aarch64: 237, riscv64: 237],
@@ -739,7 +740,7 @@ gen_syscalls! {
   // setgroups32
   // sethae
   // sethostname: FIXME: name doesn't require terminating null.
-  sethostname(name: *const c_char, len: size_t) / { name: CString, len: size_t } -> c_int 
+  sethostname(name: *const c_char, len: size_t) / { name: CString, len: size_t } -> c_int
     ~ [] for [x86_64: 170, aarch64: 161, riscv64: 161],
   setitimer(which: c_int, new_value: *const itimerval, old_value: *mut itimerval) /
     { which: c_int, new_value: itimerval, old_value: Option<itimerval> } -> c_int
@@ -842,6 +843,59 @@ gen_syscalls! {
   syslog(typ: c_int, buf: *const c_char, len: c_int) / { typ: c_int, buf: CString, len: c_int } -> c_int
     ~ [] for [x86_64: 103, aarch64: 116, riscv64: 116],
   // sysmips
+  tee(fd_in: RawFd, fd_out: RawFd, len: size_t, flags: c_uint) / { fd_in: RawFd, fd_out: RawFd, len: size_t, flags: c_uint } -> ssize_t
+    ~ [Desc] for [x86_64: 276, aarch64: 77, riscv64: 77],
+  tgkill(tgid: pid_t, tid: pid_t, sig: c_int) / { tgid: pid_t, tid: pid_t, sig: c_int } -> c_int
+    ~ [Signal, Process] for [x86_64: 234, aarch64: 131, riscv64: 131],
+  time(tloc: *mut time_t) / { } -> time_t + { tloc: Option<time_t> } ~ [Clock] for [x86_64: 201],
+  timer_create(clockid: clockid_t, sevp: *const sigevent, timerid: *mut timer_t) /
+    { clockid: clockid_t, sevp: Option<sigevent> } -> c_int + { timerid: Result<timer_t, InspectError> }
+    ~ [] for [x86_64: 222, aarch64: 107, riscv64: 107],
+  timer_delete(timerid: timer_t) / { timerid: timer_t } -> c_int ~ [] for [x86_64: 226, aarch64: 111, riscv64: 111],
+  timer_getoverrun(timerid: timer_t) / { timerid: timer_t } -> c_int ~ [] for [x86_64: 225, aarch64: 109, riscv64: 109],
+  timer_gettime(timerid: timer_t, curr_value: *mut itimerspec) / { timerid: timer_t } -> c_int + { curr_value: itimerspec }
+    ~ [] for [x86_64: 224, aarch64: 108, riscv64: 108],
+  // timer_gettime64
+  timer_settime(timerid: timer_t, flags: c_int, new_value: *const itimerspec, old_value: *mut itimerspec) /
+    { timerid: timer_t, flags: c_int, new_value: itimerspec } -> c_int + { old_value: Option<itimerspec> }
+    ~ [] for [x86_64: 223, aarch64: 110, riscv64: 110],
+  // timer_settime64
+  // timerfd
+  timerfd_create(clockid: clockid_t, flags: c_int) / { clockid: clockid_t, flags: c_int } -> RawFd
+    ~ [Desc] for [x86_64: 283, aarch64: 85, riscv64: 85],
+  timerfd_gettime(fd: RawFd, curr_value: *mut itimerspec) / { fd: RawFd } -> c_int + { curr_value: itimerspec }
+    ~ [Desc] for [x86_64: 287, aarch64: 87, riscv64: 87],
+  // timerfd_gettime64
+  timerfd_settime(fd: RawFd, flags: c_int, new_value: *const itimerspec, old_value: *mut itimerspec) /
+    { fd: RawFd, flags: c_int, new_value: itimerspec } -> c_int + { old_value: Option<itimerspec> }
+    ~ [Desc] for [x86_64: 286, aarch64: 86, riscv64: 86],
+  // timerfd_settime64
+  times(buf: *mut tms) / { } -> clock_t + { buf: tms } ~ [] for [x86_64: 100, aarch64: 153, riscv64: 153],
+  tkill(tid: pid_t, sig: c_int) / { tid: pid_t, sig: c_int } -> c_int ~ [Signal, Process] for [x86_64: 200, aarch64: 130, riscv64: 130],
+  truncate(path: *const c_char, length: off_t) / { path: PathBuf, length: off_t } -> c_int
+    ~ [File] for [x86_64: 76, aarch64: 45, riscv64: 45],
+  // truncate64
+  // ugetrlimit
+  umask(mask: mode_t) / { mask: mode_t } -> mode_t ~ [] for [x86_64: 95, aarch64: 166, riscv64: 166],
+  // umount
+  umount2(target: *const c_char, flags: c_int) / { target: PathBuf, flags: c_int } -> c_int
+    ~ [File] for [x86_64: 166, aarch64: 39, riscv64: 39],
+  uname(buf: *mut utsname) / { } -> c_int + { buf: utsname } ~ [] for [x86_64: 63, aarch64: 160, riscv64: 160],
+  unlink(pathname: *const c_char) / { pathname: PathBuf } -> c_int ~ [File] for [x86_64: 87],
+  unlinkat(dirfd: RawFd, pathname: *const c_char, flags: c_int) / { dirfd: RawFd, pathname: PathBuf, flags: c_int } -> c_int
+    ~ [Desc, File] for [x86_64: 263, aarch64: 35, riscv64: 35],
+  unshare(flags: c_int) / { flags: c_int } -> c_int ~ [] for [x86_64: 272, aarch64: 97, riscv64: 97],
+  userfaultfd(flags: c_uint) / { flags: c_uint } -> RawFd ~ [Desc] for [x86_64: 323, aarch64: 282, riscv64: 282],
+  ustat(dev: dev_t, ubuf: *mut ustat) / { dev: dev_t } -> c_int + { ubuf: ustat } ~ [] for [x86_64: 136],
+  utime(filename: *const c_char, times: *const utimbuf) / { filename: PathBuf, times: Option<utimbuf> } -> c_int
+    ~ [File] for [x86_64: 132],
+  utimensat(dirfd: RawFd, pathname: *const c_char, times: *const timespec, flags: c_int) /
+    { dirfd: RawFd, pathname: PathBuf, times: Option<[timespec; 2]>, flags: c_int } -> c_int
+    ~ [Desc, File] for [x86_64: 280, aarch64: 88, riscv64: 88],
+  // utimensat_time64
+  utimes(filename: *const c_char, times: *const timeval) / { filename: PathBuf, times: Option<[timeval; 2]> } -> c_int
+    ~ [File] for [x86_64: 235],
+  // utrap_install
 }
 
 // pub use cfg_if_has_syscall;

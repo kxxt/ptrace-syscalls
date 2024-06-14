@@ -650,9 +650,8 @@ fn wrap_syscall_arg_type(
         "RawFd" | "socklen_t" | "c_int" | "c_uint" | "c_ulong" | "c_long" | "i16" | "i32"
         | "i64" | "u64" | "usize" | "isize" | "size_t" | "key_serial_t" | "AddressType"
         | "mode_t" | "uid_t" | "pid_t" | "gid_t" | "off_t" | "u32" | "clockid_t" | "id_t"
-        | "key_t" | "mqd_t" | "aio_context_t" | "dev_t" | "nfds_t" | "loff_t" | "qid_t" => {
-          (ty.to_token_stream(), false)
-        }
+        | "key_t" | "mqd_t" | "aio_context_t" | "dev_t" | "nfds_t" | "loff_t" | "qid_t"
+        | "time_t" | "timer_t" => (ty.to_token_stream(), false),
         "sockaddr"
         | "CString"
         | "PathBuf"
@@ -685,14 +684,18 @@ fn wrap_syscall_arg_type(
         | "pollfd"
         | "__mount_arg"
         | "msghdr"
-        | "riscv_hwprobe" 
-        | "siginfo_t" 
-        | "sched_attr" 
-        | "sched_param" 
+        | "riscv_hwprobe"
+        | "siginfo_t"
+        | "sched_attr"
+        | "sched_param"
         | "stack_t"
         | "mnt_id_req"
         | "statx"
-        | "sysinfo" => (quote!(Result<#ty, #crate_token::InspectError>), true),
+        | "sysinfo"
+        | "itimerspec"
+        | "tms"
+        | "utsname"
+        | "ustat" => (quote!(Result<#ty, #crate_token::InspectError>), true),
         _ => {
           if ty.ident == "Option" {
             let PathArguments::AngleBracketed(arg) = &ty.arguments else {
@@ -701,8 +704,10 @@ fn wrap_syscall_arg_type(
             let arg = arg.args.to_token_stream().to_string();
             match arg.as_str() {
               "PathBuf" | "timespec" | "Vec < CString >" | "CString" | "Vec < c_ulong >"
-              | "Vec < c_uint >" | "Vec < gid_t >"| "timezone" | "mq_attr" | "siginfo_t" | "sigset_t" | "iovec"
-              | "rlimit64" | "fd_set" | "sockaddr" | "sigaction" | "timeval" | "itimerval" | "stack_t" => {
+              | "Vec < c_uint >" | "Vec < gid_t >" | "timezone" | "mq_attr" | "siginfo_t"
+              | "sigset_t" | "iovec" | "rlimit64" | "fd_set" | "sockaddr" | "sigaction"
+              | "timeval" | "itimerval" | "stack_t" | "timer_t" | "time_t" | "sigevent"
+              | "itimerspec" | "utimbuf" | "[timespec; 2]" | "[timeval; 2]" => {
                 (quote!(Result<#ty, #crate_token::InspectError>), true)
               }
               _ => panic!("Unsupported inner syscall arg type: {:?}", arg),

@@ -10,10 +10,7 @@ use std::{
 use nix::{
   errno::Errno,
   libc::{
-    c_long, epoll_event, fd_set, iocb, iovec, itimerval, mmsghdr, mq_attr, msghdr, msqid_ds,
-    open_how, pollfd, rlimit, rlimit64, rusage, sched_attr, sched_param, sembuf, sigaction,
-    sigevent, siginfo_t, sigset_t, sockaddr, stack_t, stat, statfs, timespec, timeval, timex,
-    statx, sysinfo
+    c_long, epoll_event, fd_set, iocb, iovec, itimerspec, itimerval, mmsghdr, mq_attr, msghdr, msqid_ds, open_how, pollfd, rlimit, rlimit64, rusage, sched_attr, sched_param, sembuf, sigaction, sigevent, siginfo_t, sigset_t, sockaddr, stack_t, stat, statfs, statx, sysinfo, timespec, timeval, timex, tms, utimbuf, utsname
   },
   sys::ptrace::{self, AddressType},
   unistd::Pid,
@@ -22,7 +19,7 @@ use nix::{
 use crate::{
   arch::PtraceRegisters,
   types::{
-    __aio_sigset, __mount_arg, cap_user_data, cap_user_header, futex_waitv, io_event, io_uring_params, kexec_segment, landlock_ruleset_attr, linux_dirent, linux_dirent64, mnt_id_req, mount_attr, rseq, statmount, timezone
+    __aio_sigset, __mount_arg, cap_user_data, cap_user_header, futex_waitv, io_event, io_uring_params, kexec_segment, landlock_ruleset_attr, linux_dirent, linux_dirent64, mnt_id_req, mount_attr, rseq, statmount, timezone, ustat
   },
 };
 
@@ -185,6 +182,37 @@ impl InspectFromPid for Result<mnt_id_req, InspectError> {
 }
 
 impl InspectFromPid for Result<statx, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+
+impl InspectFromPid for Result<utimbuf, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+impl InspectFromPid for Result<ustat, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+impl InspectFromPid for Result<utsname, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+impl InspectFromPid for Result<itimerspec, InspectError> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    todo!()
+  }
+}
+
+impl InspectFromPid for Result<tms, InspectError> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }

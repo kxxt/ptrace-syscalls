@@ -258,3 +258,12 @@ pub struct statmount {
     __spare2: [u64;50],
     str: [c_char]
 }
+
+#[derive(Debug, Clone, PartialEq)]
+#[repr(C)]
+pub struct ustat {
+  f_tfree: c_int,
+  f_tinode: ino64_t,
+  f_fname: [c_char; 6],
+  f_fpack: [c_char; 6],
+}
