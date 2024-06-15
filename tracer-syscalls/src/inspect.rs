@@ -38,17 +38,12 @@ pub enum InspectError<T: Clone + PartialEq> {
 
 pub type InspectResult<T> = Result<T, InspectError<T>>;
 
-/// Inspect the registers captured by ptrace and return the inspection result.
-pub trait FromInspectingRegs {
-  fn from_inspecting_regs(pid: Pid, regs: &PtraceRegisters) -> Self;
-}
-
-pub trait SyscallStopInspect {
-  type RawArgs: Copy;
+/// Inspect the arguments and results on sysenter/sysexit stops based on register values captured on sysenter.
+pub(crate) trait SyscallStopInspect: Copy {
   type Args;
   type Result;
-  fn inspect_sysenter(raw_args: Self::RawArgs) -> Self::Args;
-  fn inspect_sysexit(raw_args: Self::RawArgs, regs: &PtraceRegisters) -> Self::Result;
+  fn inspect_sysenter(self, inspectee_pid: Pid) -> Self::Args;
+  fn inspect_sysexit(self, inspectee_pid: Pid, regs: &PtraceRegisters) -> Self::Result;
 }
 
 /// Use ptrace to inspect the process with the given pid and return the inspection result.

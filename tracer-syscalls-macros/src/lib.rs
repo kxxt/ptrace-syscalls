@@ -201,26 +201,20 @@ fn gen_syscall_args_struct(
   let mut arg_names = vec![];
   let mut wrapped_arg_types = vec![];
   for arg in args.iter() {
-    let i = syscall
-      .raw_args
-      .iter()
-      .position(|x| x.ident == arg.ident)
-      .unwrap();
     let arg_name = &arg.ident;
     arg_names.push(arg_name.clone());
     let arg_type = &arg.ty;
     let (wrapped_arg_type, need_memory_inspection) =
       wrap_syscall_arg_type(arg_type, crate_token.clone());
     wrapped_arg_types.push(wrapped_arg_type.clone());
-    let literal_i = syn::LitInt::new(&i.to_string(), arg_type.span());
     if !need_memory_inspection {
       let inspect = quote! {
-        let #arg_name = syscall_arg!(regs, #literal_i) as #wrapped_arg_type;
+        let #arg_name = raw_args.#arg_name as #wrapped_arg_type;
       };
       inspects.push(inspect);
     } else {
       let inspect = quote! {
-        let #arg_name = #crate_token::InspectFromPid::inspect_from(inspectee_pid, syscall_arg!(regs, #literal_i) as #crate_token::AddressType);
+        let #arg_name = #crate_token::InspectFromPid::inspect_from(inspectee_pid, raw_args.#arg_name as #crate_token::AddressType);
       };
       inspects.push(inspect);
     }
@@ -253,26 +247,20 @@ fn gen_syscall_args_struct(
   });
   if let Some(modified_args) = &syscall.modified_args {
     for modified_arg in modified_args.args.iter() {
-      let i = syscall
-        .raw_args
-        .iter()
-        .position(|x| x.ident == modified_arg.ident)
-        .unwrap();
       let arg_name = &modified_arg.ident;
       modified_arg_names.push(arg_name.clone());
       let arg_type = &modified_arg.ty;
       let (wrapped_arg_type, need_memory_inspection) =
         wrap_syscall_arg_type(arg_type, crate_token.clone());
       modified_arg_types.push(wrapped_arg_type.clone());
-      let literal_i = syn::LitInt::new(&i.to_string(), arg_type.span());
       if !need_memory_inspection {
         let inspect = quote! {
-          let #arg_name = syscall_arg!(regs, #literal_i) as #wrapped_arg_type;
+          let #arg_name = raw_args.#arg_name as #wrapped_arg_type;
         };
         inspect_modified_args.push(inspect);
       } else {
         let inspect = quote! {
-          let #arg_name = #crate_token::InspectFromPid::inspect_from(inspectee_pid, syscall_arg!(regs, #literal_i) as #crate_token::AddressType);
+          let #arg_name = #crate_token::InspectFromPid::inspect_from(inspectee_pid, raw_args.#arg_name as #crate_token::AddressType);
         };
         inspect_modified_args.push(inspect);
       }
@@ -292,8 +280,8 @@ fn gen_syscall_args_struct(
       }
 
       #[cfg(any(#(target_arch = #arch_names),*))]
-      impl #crate_token::FromInspectingRegs for #camel_case_raw_args_type {
-        fn from_inspecting_regs(inspectee_pid: #crate_token::Pid, regs: &#crate_token::arch::PtraceRegisters) -> Self {
+      impl #camel_case_raw_args_type {
+        fn from_regs(regs: &#crate_token::arch::PtraceRegisters) -> Self {
           use #crate_token::arch::syscall_arg;
           #(#inspect_raw_args)*
           Self {
@@ -318,6 +306,26 @@ fn gen_syscall_args_struct(
           {
             #groups
           }.into()
+        }
+      }
+
+      #[cfg(any(#(target_arch = #arch_names),*))]
+      impl #crate_token::SyscallStopInspect for #camel_case_raw_args_type {
+        type Args = #camel_case_args_type;
+        type Result = #camel_case_modified_args_type;
+        fn inspect_sysenter(self, inspectee_pid: Pid) -> Self::Args {
+          let raw_args = self;
+          #(#inspects)*
+          Self::Args {
+            #(#arg_names),*
+          }
+        }
+        fn inspect_sysexit(self, inspectee_pid: Pid, regs: &PtraceRegisters) -> Self::Result {
+          let raw_args = self;
+          #(#inspect_modified_args)*
+          Self::Result {
+            #(#modified_arg_names),*
+          }
         }
       }
     },
@@ -351,17 +359,6 @@ fn gen_syscall_args_struct(
       impl From<#camel_case_args_type> for #crate_token::SyscallArgs {
         fn from(args: #camel_case_args_type) -> Self {
           #crate_token::SyscallArgs::#camel_case_ident(args)
-        }
-      }
-
-      #[cfg(any(#(target_arch = #arch_names),*))]
-      impl #crate_token::FromInspectingRegs for #camel_case_args_type {
-        fn from_inspecting_regs(inspectee_pid: #crate_token::Pid, regs: &#crate_token::arch::PtraceRegisters) -> Self {
-          use #crate_token::arch::syscall_arg;
-          #(#inspects)*
-          Self {
-            #(#arg_names),*
-          }
         }
       }
     },
@@ -398,16 +395,6 @@ fn gen_syscall_args_struct(
         }
       }
 
-      #[cfg(any(#(target_arch = #arch_names),*))]
-      impl #crate_token::FromInspectingRegs for #camel_case_modified_args_type {
-        fn from_inspecting_regs(inspectee_pid: #crate_token::Pid, regs: &#crate_token::arch::PtraceRegisters) -> Self {
-          use #crate_token::arch::syscall_arg;
-          #(#inspect_modified_args)*
-          Self {
-            #(#modified_arg_names),*
-          }
-        }
-      }
     },
     name: camel_case_ident,
     args_struct_type: camel_case_args_type,
@@ -551,35 +538,51 @@ pub fn gen_syscalls(input: TokenStream) -> TokenStream {
       }
     }
 
-    impl #crate_token::FromInspectingRegs for SyscallArgs {
-      fn from_inspecting_regs(inspectee_pid: #crate_token::Pid, regs: &#crate_token::arch::PtraceRegisters) -> Self {
+    impl SyscallRawArgs {
+      fn from_regs(regs: &#crate_token::arch::PtraceRegisters) -> Self {
         use #crate_token::arch::syscall_no_from_regs;
         match syscall_no_from_regs!(regs) as isize {
           #(
             #[cfg(any(#(target_arch = #supported_archs),*))]
             #syscall_numbers => {
-              Self::#names(#crate_token::FromInspectingRegs::from_inspecting_regs(inspectee_pid, regs))
+              Self::#names(#raw_arg_struct_types::from_regs(regs))
             },
           )*
           _ => {
-            Self::Unknown(#crate_token::FromInspectingRegs::from_inspecting_regs(inspectee_pid, regs))
+            Self::Unknown(UnknownArgs::from_regs(regs))
           }
         }
       }
     }
 
-    impl #crate_token::FromInspectingRegs for SyscallRawArgs {
-      fn from_inspecting_regs(pid: #crate_token::Pid, regs: &#crate_token::arch::PtraceRegisters) -> Self {
-        use #crate_token::arch::syscall_no_from_regs;
-        match syscall_no_from_regs!(regs) as isize {
+    impl SyscallStopInspect for SyscallRawArgs {
+      type Args = SyscallArgs;
+      type Result = SyscallModifiedArgs;
+
+      fn inspect_sysenter(self, inspectee_pid: Pid) -> Self::Args {
+        match self {
           #(
             #[cfg(any(#(target_arch = #supported_archs),*))]
-            #syscall_numbers => {
-              Self::#names(#crate_token::FromInspectingRegs::from_inspecting_regs(pid, regs))
+            Self::#names(raw_args) => {
+              SyscallArgs::#names(raw_args.inspect_sysenter(inspectee_pid))
             },
           )*
-          _ => {
-            Self::Unknown(#crate_token::FromInspectingRegs::from_inspecting_regs(pid, regs))
+          Self::Unknown(unknown) => {
+            SyscallArgs::Unknown(unknown)
+          }
+        }
+      }
+
+      fn inspect_sysexit(self, inspectee_pid: Pid, regs: &PtraceRegisters) -> Self::Result {
+        match self {
+          #(
+            #[cfg(any(#(target_arch = #supported_archs),*))]
+            Self::#names(raw_args) => {
+              SyscallModifiedArgs::#names(raw_args.inspect_sysexit(inspectee_pid, regs))
+            },
+          )*
+          Self::Unknown(unknown) => {
+            SyscallModifiedArgs::Unknown(unknown)
           }
         }
       }

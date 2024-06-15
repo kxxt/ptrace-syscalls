@@ -9,17 +9,17 @@ use std::{
 use crate::{
   arch::{syscall_arg, syscall_no_from_regs, syscall_res_from_regs, PtraceRegisters},
   types::*,
-  FromInspectingRegs, InspectError, SyscallNumber, InspectResult
+  InspectError, InspectResult, SyscallNumber, SyscallStopInspect,
 };
 use crate::{SyscallGroups, SyscallGroupsGetter};
 use enumflags2::BitFlags;
 use nix::libc::{
   c_char, c_long, c_uchar, c_uint, c_ulong, c_void, clock_t, clockid_t, clone_args, dev_t,
-  epoll_event, fd_set, gid_t, id_t, iocb, iovec, itimerspec, itimerval, key_t, loff_t, mmsghdr,
-  mode_t, mq_attr, mqd_t, msghdr, msqid_ds, nfds_t, off_t, open_how, pid_t, pollfd, rlimit,
-  rlimit64, rusage, sched_attr, sched_param, sembuf, sigaction, sigevent, siginfo_t, sigset_t,
-  size_t, sockaddr, socklen_t, ssize_t, stack_t, stat, statfs, statx, sysinfo, time_t, timer_t,
-  timespec, timeval, timex, tms, uid_t, utsname, utimbuf, idtype_t, shmid_ds
+  epoll_event, fd_set, gid_t, id_t, idtype_t, iocb, iovec, itimerspec, itimerval, key_t, loff_t,
+  mmsghdr, mode_t, mq_attr, mqd_t, msghdr, msqid_ds, nfds_t, off_t, open_how, pid_t, pollfd,
+  rlimit, rlimit64, rusage, sched_attr, sched_param, sembuf, shmid_ds, sigaction, sigevent,
+  siginfo_t, sigset_t, size_t, sockaddr, socklen_t, ssize_t, stack_t, stat, statfs, statx, sysinfo,
+  time_t, timer_t, timespec, timeval, timex, tms, uid_t, utimbuf, utsname,
 };
 use nix::sys::ptrace::AddressType;
 use nix::unistd::Pid;
@@ -32,14 +32,8 @@ pub struct UnknownArgs {
   pub args: [usize; 6],
 }
 
-impl SyscallNumber for UnknownArgs {
-  fn syscall_number(&self) -> isize {
-    self.number
-  }
-}
-
-impl FromInspectingRegs for UnknownArgs {
-  fn from_inspecting_regs(_pid: Pid, regs: &PtraceRegisters) -> Self {
+impl UnknownArgs {
+  fn from_regs(regs: &PtraceRegisters) -> Self {
     let number = syscall_no_from_regs!(regs) as isize;
     let args = [
       syscall_arg!(regs, 0) as usize,
@@ -50,6 +44,12 @@ impl FromInspectingRegs for UnknownArgs {
       syscall_arg!(regs, 5) as usize,
     ];
     UnknownArgs { number, args }
+  }
+}
+
+impl SyscallNumber for UnknownArgs {
+  fn syscall_number(&self) -> isize {
+    self.number
   }
 }
 
@@ -88,7 +88,7 @@ gen_syscalls! {
   brk(addr: *mut c_void) / { addr: AddressType } -> c_int ~ [Memory] for [x86_64: 12, aarch64: 214, riscv64: 214],
   // cachectl, cacheflush
   // cachestat: TODO: https://github.com/golang/go/issues/61917
-  cachestat(fd: RawFd, cstat_range: *mut cachestat_range, cstat: *mut cachestat, flags: c_uint) / 
+  cachestat(fd: RawFd, cstat_range: *mut cachestat_range, cstat: *mut cachestat, flags: c_uint) /
     { fd: RawFd, cstat_range: cachestat_range, cstat: cachestat, flags: c_uint } -> c_int
     ~ [Desc] for [x86_64: 451, aarch64: 451, riscv64: 451],
   capget(hdrp: *mut cap_user_header, datap: *mut cap_user_data) / { } -> c_int +
