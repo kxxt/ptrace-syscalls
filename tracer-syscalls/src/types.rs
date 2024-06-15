@@ -212,8 +212,8 @@ pub struct riscv_hwprobe {
 }
 
 #[derive(Debug, PartialEq)]
-#[repr(C)]
-// aligned(4 * sizeof(__u64)) as a tracer we are not interested in the alignment
+#[repr(C, align(32))]
+// aligned(4 * sizeof(__u64))
 pub struct rseq {
   cpu_id_start: u32,
   cpu_id: u32,
