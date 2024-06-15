@@ -11,8 +11,9 @@ use crate::{
   types::*,
   InspectError, InspectResult, SyscallNumber, SyscallStopInspect,
 };
-use crate::{SyscallGroups, SyscallGroupsGetter};
+use crate::{ptrace_getregs, SyscallGroups, SyscallGroupsGetter};
 use enumflags2::BitFlags;
+use nix::errno::Errno;
 use nix::libc::{
   c_char, c_long, c_uchar, c_uint, c_ulong, c_void, clock_t, clockid_t, clone_args, dev_t,
   epoll_event, fd_set, gid_t, id_t, idtype_t, iocb, iovec, itimerspec, itimerval, key_t, loff_t,
@@ -922,3 +923,13 @@ gen_syscalls! {
 }
 
 // pub use cfg_if_has_syscall;
+
+impl SyscallRawArgs {
+  /// Get the raw arguments of a syscall on syscall-enter stop.
+  ///
+  /// Calling this function elsewhere will result in incorrect results or errors.
+  pub fn get_on_sysenter(pid: Pid) -> Result<Self, Errno> {
+    let regs = ptrace_getregs(pid)?;
+    Ok(Self::from_regs(&regs))
+  }
+}

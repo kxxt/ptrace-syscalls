@@ -14,3 +14,10 @@ pub use syscalls::*;
 pub trait SyscallNumber {
   fn syscall_number(&self) -> isize;
 }
+
+/// Get the raw arguments of a syscall on syscall-enter stop.
+///
+/// Calling this function elsewhere will result in incorrect results or errors.
+pub fn get_raw_args(pid: Pid) -> Result<SyscallRawArgs, nix::Error> {
+  SyscallRawArgs::get_on_sysenter(pid)
+}

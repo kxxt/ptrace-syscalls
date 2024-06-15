@@ -29,6 +29,45 @@ use crate::{
   },
 };
 
+pub fn ptrace_getregs(pid: Pid) -> Result<PtraceRegisters, Errno> {
+  // Don't use GETREGSET on x86_64.
+  // In some cases(it usually happens several times at and after exec syscall exit),
+  // we only got 68/216 bytes into `regs`, which seems unreasonable. Not sure why.
+  cfg_if::cfg_if! {
+      if #[cfg(target_arch = "x86_64")] {
+          ptrace::getregs(pid)
+      } else {
+          // https://github.com/torvalds/linux/blob/v6.9/include/uapi/linux/elf.h#L378
+          // libc crate doesn't provide this constant when using musl libc.
+          const NT_PRSTATUS: std::ffi::c_int	= 1;
+
+          use nix::sys::ptrace::AddressType;
+
+          let mut regs = std::mem::MaybeUninit::<PtraceRegisters>::uninit();
+          let iovec = nix::libc::iovec {
+              iov_base: regs.as_mut_ptr() as AddressType,
+              iov_len: std::mem::size_of::<PtraceRegisters>(),
+          };
+          let ptrace_result = unsafe {
+              nix::libc::ptrace(
+                  nix::libc::PTRACE_GETREGSET,
+                  pid.as_raw(),
+                  NT_PRSTATUS,
+                  &iovec as *const _ as *const nix::libc::c_void,
+              )
+          };
+          let regs = if -1 == ptrace_result {
+              let errno = nix::errno::Errno::last();
+              return Err(errno);
+          } else {
+              assert_eq!(iovec.iov_len, std::mem::size_of::<PtraceRegisters>());
+              unsafe { regs.assume_init() }
+          };
+          Ok(regs)
+      }
+  }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum InspectError<T: Clone + PartialEq> {
   /// The syscall failed thus the sysexit-stop inspection is not done.
@@ -40,7 +79,7 @@ pub enum InspectError<T: Clone + PartialEq> {
 pub type InspectResult<T> = Result<T, InspectError<T>>;
 
 /// Inspect the arguments and results on sysenter/sysexit stops based on register values captured on sysenter.
-pub(crate) trait SyscallStopInspect: Copy {
+pub trait SyscallStopInspect: Copy {
   type Args;
   type Result;
   fn inspect_sysenter(self, inspectee_pid: Pid) -> Self::Args;
@@ -62,7 +101,7 @@ impl<T: Clone + PartialEq> InspectFromPid for InspectResult<SizedWrapper<T>> {
   fn inspect_from(pid: Pid, mut address: AddressType) -> Self {
     let mut buf = MaybeUninit::<T>::uninit();
     let mut ptr = buf.as_mut_ptr() as *mut c_long;
-    let ptr_end = unsafe { ptr.add(size_of::<T>()) };
+    let ptr_end = unsafe { buf.as_mut_ptr().add(1) } as *mut c_long;
     while ptr < ptr_end {
       let word = match ptrace::read(pid, address) {
         Err(errno) => {
@@ -86,7 +125,7 @@ impl<T: Clone + PartialEq> InspectFromPid for InspectResult<SizedWrapper<T>> {
       } else {
         unsafe {
           *ptr = word;
-          ptr = ptr.add(WORD_SIZE);
+          ptr = ptr.add(1);
           address = address.add(WORD_SIZE);
         }
       }
