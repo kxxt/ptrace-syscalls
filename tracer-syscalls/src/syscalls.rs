@@ -9,7 +9,7 @@ use std::{
 use crate::{
   arch::{syscall_arg, syscall_no_from_regs, syscall_res_from_regs, PtraceRegisters},
   types::*,
-  FromInspectingRegs, InspectError, SyscallNumber,
+  FromInspectingRegs, InspectError, SyscallNumber, InspectResult
 };
 use crate::{SyscallGroups, SyscallGroupsGetter};
 use enumflags2::BitFlags;
@@ -65,10 +65,10 @@ gen_syscalls! {
   // _llseek (32bit)
   // _newselect
   accept(socketfd: c_int, addr: *mut sockaddr, addrlen: *mut socklen_t) /
-    { socketfd: RawFd, addr: sockaddr, addrlen: Result<socklen_t, InspectError> } -> c_int + { addr: sockaddr, addrlen: Result<socklen_t, InspectError> }
+    { socketfd: RawFd, addr: sockaddr, addrlen: InspectResult<socklen_t> } -> c_int + { addr: sockaddr, addrlen: InspectResult<socklen_t> }
     ~ [Network] for [x86_64: 43, aarch64: 202, riscv64: 202],
   accept4(socketfd: RawFd, addr: *mut sockaddr, addrlen: *mut socklen_t, flags: c_int) /
-    { socketfd: RawFd, addr: sockaddr, addrlen: Result<socklen_t, InspectError>, flags: c_int } -> c_int + { addr: sockaddr, addrlen: Result<socklen_t, InspectError> }
+    { socketfd: RawFd, addr: sockaddr, addrlen: InspectResult<socklen_t>, flags: c_int } -> c_int + { addr: sockaddr, addrlen: InspectResult<socklen_t> }
     ~ [Network] for [x86_64: 288, aarch64: 242, riscv64: 242],
   access(pathname: *const c_char, mode: c_int) / { pathname: PathBuf, mode: c_int } -> c_int ~ [File] for [x86_64: 21],
   acct(filename: *const c_char) / { filename: Option<PathBuf> } -> c_int ~ [File] for [x86_64: 163, aarch64: 89, riscv64: 89],
@@ -120,10 +120,10 @@ gen_syscalls! {
   // clone, the arguments vary for different architectures.
   clone(flags: c_ulong, stack: AddressType, parent_tid: *mut pid_t, child_tid: *mut pid_t, tls: c_ulong) /
    { flags: c_ulong, stack: AddressType, tls: c_ulong } -> c_long +
-   { parent_tid: Result<pid_t, InspectError>, child_tid: Result<pid_t, InspectError> } ~ [Process] for [x86_64: 56],
+   { parent_tid: InspectResult<pid_t>, child_tid: InspectResult<pid_t> } ~ [Process] for [x86_64: 56],
   clone(flags: c_ulong, stack: AddressType, parent_tid: *mut pid_t, tls: c_ulong, child_tid: *mut pid_t) /
    { flags: c_ulong, stack: AddressType, tls: c_ulong } -> c_long +
-   { parent_tid: Result<pid_t, InspectError>, child_tid: Result<pid_t, InspectError> } ~ [Process] for [aarch64: 220, riscv64: 220],
+   { parent_tid: InspectResult<pid_t>, child_tid: InspectResult<pid_t> } ~ [Process] for [aarch64: 220, riscv64: 220],
   clone3(cl_args: *mut clone_args, size: size_t) / { cl_args: clone_args, size: size_t } -> c_int ~ [Process] for [x86_64: 435, aarch64: 435, riscv64: 435],
   close(fd: RawFd) / { fd: RawFd } -> c_int ~ [Desc] for [x86_64: 3, aarch64: 57, riscv64: 57],
   close_range(first: c_uint, last: c_uint, flags: c_uint) / { first: c_uint, last: c_uint, flags: c_uint }
@@ -131,8 +131,8 @@ gen_syscalls! {
   connect(sockfd: RawFd, addr: *const sockaddr, addrlen: socklen_t) /
     { sockfd: RawFd, addr: sockaddr, addrlen: socklen_t } -> c_int ~ [Network] for [x86_64: 42, aarch64: 203, riscv64: 203],
   copy_file_range(fd_in: RawFd, off_in: *mut off_t, fd_out: RawFd, off_out: *mut off_t, len: size_t, flags: c_uint) /
-    { fd_in: RawFd, off_in: Result<off_t, InspectError>, fd_out: RawFd, off_out: Result<off_t, InspectError>, len: size_t, flags: c_uint }
-    -> ssize_t + { off_in: Result<off_t, InspectError>, off_out: Result<off_t, InspectError> } ~ [Desc] for [x86_64: 326, aarch64: 285, riscv64: 285],
+    { fd_in: RawFd, off_in: InspectResult<off_t>, fd_out: RawFd, off_out: InspectResult<off_t>, len: size_t, flags: c_uint }
+    -> ssize_t + { off_in: InspectResult<off_t>, off_out: InspectResult<off_t> } ~ [Desc] for [x86_64: 326, aarch64: 285, riscv64: 285],
   creat(pathname: *const c_char, mode: mode_t) / { pathname: PathBuf, mode: mode_t } -> RawFd ~ [Desc, File] for [x86_64: 85],
   delete_module(name: *const c_char, flags: c_uint) / { name: CString, flags: c_uint } -> c_int ~ [] for [x86_64: 176, aarch64: 106, riscv64: 106],
   // dipc
@@ -226,8 +226,8 @@ gen_syscalls! {
   // ftruncate64
   // futex: val2 can be a pointer to timespec or a u32 value. val2, uaddr2 and val3 is optional for some ops. TODO: design a better rust interface
   futex(uaddr: *mut u32, futex_op: c_int, val: u32, val2: usize, uaddr2: *mut u32, val3: u32) /
-    { uaddr: Result<u32, InspectError>, futex_op: c_int, val: u32, val2: usize, uaddr2: Result<u32, InspectError>, val3: u32 }
-    -> c_long + { uaddr: Result<u32, InspectError>, uaddr2: Result<u32, InspectError> } ~ [] for [x86_64: 202, aarch64: 98, riscv64: 98],
+    { uaddr: InspectResult<u32>, futex_op: c_int, val: u32, val2: usize, uaddr2: InspectResult<u32>, val3: u32 }
+    -> c_long + { uaddr: InspectResult<u32>, uaddr2: InspectResult<u32> } ~ [] for [x86_64: 202, aarch64: 98, riscv64: 98],
   // https://elixir.bootlin.com/linux/v6.9.3/source/include/linux/syscalls.h#L568
   // futex_requeue: waiters is always a two-element array of futex_waitv. TODO: design a better rust interface
   futex_requeue(waiters: *mut futex_waitv, flags: c_uint, nr_wake: c_int, nr_requeue: c_int) /
@@ -235,25 +235,25 @@ gen_syscalls! {
     -> c_long + { waiters: Vec<futex_waitv> } ~ [] for [x86_64: 456, aarch64: 456, riscv64: 456],
   // futex_time64
   futex_wait(uaddr: *mut u32, val: c_ulong, mask: c_ulong, flags: c_uint, timespec: *mut timespec, clockid: clockid_t) /
-    { uaddr: Result<u32, InspectError>, val: c_ulong, mask: c_ulong, flags: c_uint, timespec: timespec, clockid: clockid_t }
-    -> c_long + { uaddr: Result<u32, InspectError> } ~ [] for [x86_64: 455, aarch64: 455, riscv64: 455],
+    { uaddr: InspectResult<u32>, val: c_ulong, mask: c_ulong, flags: c_uint, timespec: timespec, clockid: clockid_t }
+    -> c_long + { uaddr: InspectResult<u32> } ~ [] for [x86_64: 455, aarch64: 455, riscv64: 455],
   futex_waitv(waiters: *mut futex_waitv, nr_futexes: c_uint, flags: c_uint, timeout: *mut timespec, clockid: clockid_t) /
     { waiters: Vec<futex_waitv>, nr_futexes: c_uint, flags: c_uint, timeout: timespec, clockid: clockid_t }
     -> c_long + { waiters: Vec<futex_waitv> } ~ [] for [x86_64: 449, aarch64: 449, riscv64: 449],
   futex_wake(uaddr: *mut u32, mask: c_ulong, nr: c_int, flags: c_uint) /
-    { uaddr: Result<u32, InspectError>, mask: c_ulong, nr: c_int, flags: c_uint }
-    -> c_long + { uaddr: Result<u32, InspectError> } ~ [] for [x86_64: 454, aarch64: 454, riscv64: 454],
+    { uaddr: InspectResult<u32>, mask: c_ulong, nr: c_int, flags: c_uint }
+    -> c_long + { uaddr: InspectResult<u32> } ~ [] for [x86_64: 454, aarch64: 454, riscv64: 454],
   futimesat(dirfd: RawFd, pathname: *const c_char, times: *const timeval) /
     { dirfd: RawFd, pathname: PathBuf, times: [timeval;2] } -> c_int ~ [Desc, File] for [x86_64: 261],
   // get_mempolicy: nodemask: [c_ulong; (maxnode + ULONG_WIDTH - 1) / ULONG_WIDTH]
   get_mempolicy(mode: *mut c_int, nodemask: *mut c_ulong, maxnode: c_ulong, addr: AddressType, flags: c_ulong) /
     { maxnode: c_ulong, addr: AddressType, flags: c_ulong } -> c_long +
-    { mode: Result<Option<c_int>, InspectError>, nodemask: Option<Vec<c_ulong>> } ~ [Memory] for [x86_64: 239, aarch64: 236, riscv64: 236],
+    { mode: InspectResult<Option<c_int>>, nodemask: Option<Vec<c_ulong>> } ~ [Memory] for [x86_64: 239, aarch64: 236, riscv64: 236],
   get_robust_list(pid: pid_t, head_ptr: *mut *mut robust_list_head, len_ptr: *mut size_t) /
-    { pid: pid_t, head_ptr: Result<AddressType, InspectError>, len_ptr: size_t } -> c_long ~ [] for [x86_64: 274, aarch64: 100, riscv64: 100],
+    { pid: pid_t, head_ptr: InspectResult<AddressType>, len_ptr: size_t } -> c_long ~ [] for [x86_64: 274, aarch64: 100, riscv64: 100],
   get_thread_area(u_info: *mut user_desc) / { u_info: user_desc } -> c_int + { u_info: user_desc } ~ [] for [x86_64: 211],
   getcpu(cpu: *mut c_uint, node: *mut c_uint) /
-    { cpu: Result<Option<c_uint>, InspectError>, node: Result<Option<c_uint>, InspectError> } -> c_int ~ [] for [x86_64: 309, aarch64: 168, riscv64: 168],
+    { cpu: InspectResult<Option<c_uint>>, node: InspectResult<Option<c_uint>> } -> c_int ~ [] for [x86_64: 309, aarch64: 168, riscv64: 168],
   getcwd(buf: *mut c_char, size: size_t) / { size: size_t } -> c_long + { buf: CString } ~ [File] for [x86_64: 79, aarch64: 17, riscv64: 17],
   getdents(fd: RawFd, dirp: *mut linux_dirent, count: c_uint) / { fd: RawFd, count: c_uint } -> c_int + { dirp: Vec<linux_dirent> } ~ [Desc] for [x86_64: 78],
   getdents64(fd: RawFd, dirp: *mut linux_dirent64, count: c_uint) / { fd: RawFd, count: c_uint } -> c_int + { dirp: Vec<linux_dirent64> }
@@ -272,7 +272,7 @@ gen_syscalls! {
   getitimer(which: c_int, value: *mut itimerval) / { which: c_int } -> c_int + { value: itimerval } ~ [] for [x86_64: 36, aarch64: 102, riscv64: 102],
   // getpagesize
   getpeername(sockfd: RawFd, addr: *mut sockaddr, addrlen: *mut socklen_t) /
-    { sockfd: RawFd, addr: sockaddr, addrlen: Result<socklen_t, InspectError> } -> c_int + { addr: sockaddr, addrlen: Result<socklen_t, InspectError> }
+    { sockfd: RawFd, addr: sockaddr, addrlen: InspectResult<socklen_t> } -> c_int + { addr: sockaddr, addrlen: InspectResult<socklen_t> }
     ~ [Network] for [x86_64: 52, aarch64: 205, riscv64: 205],
   getpgid(pid: pid_t) / { pid: pid_t } -> pid_t ~ [] for [x86_64: 121, aarch64: 155, riscv64: 155],
   getpgrp() / {} -> pid_t ~ [Pure] for [x86_64: 111],
@@ -282,22 +282,22 @@ gen_syscalls! {
   getrandom(buf: *mut c_void, buflen: size_t, flags: c_uint) / { buflen: size_t, flags: c_uint } -> ssize_t + { buf: Vec<u8> }
     ~ [] for [x86_64: 318, aarch64: 278, riscv64: 278],
   getresgid(rgid: *mut gid_t, egid: *mut gid_t, sgid: *mut gid_t) / {}
-    -> c_int + { rgid: Result<gid_t, InspectError>, egid: Result<gid_t, InspectError>, sgid: Result<gid_t, InspectError> }
+    -> c_int + { rgid: InspectResult<gid_t>, egid: InspectResult<gid_t>, sgid: InspectResult<gid_t> }
     ~ [Creds] for [x86_64: 120, aarch64: 150, riscv64: 150],
   // getresgid32
   getresuid(ruid: *mut uid_t, euid: *mut uid_t, suid: *mut uid_t) / {}
-    -> c_int + { ruid: Result<uid_t, InspectError>, euid: Result<uid_t, InspectError>, suid: Result<uid_t, InspectError> }
+    -> c_int + { ruid: InspectResult<uid_t>, euid: InspectResult<uid_t>, suid: InspectResult<uid_t> }
     ~ [Creds] for [x86_64: 118, aarch64: 148, riscv64: 148],
   // getresuid32
   getrlimit(resource: c_int, rlim: *mut rlimit) / { resource: c_int } -> c_int + { rlim: rlimit } ~ [] for [x86_64: 97, aarch64: 163, riscv64: 163],
   getrusage(who: c_int, usage: *mut rusage) / { who: c_int } -> c_int + { usage: rusage } ~ [] for [x86_64: 98, aarch64: 165, riscv64: 165],
   getsid(pid: pid_t) / { pid: pid_t } -> pid_t ~ [] for [x86_64: 124, aarch64: 156, riscv64: 156],
   getsockname(sockfd: RawFd, addr: *mut sockaddr, addrlen: *mut socklen_t) /
-    { sockfd: RawFd, addrlen: Result<socklen_t, InspectError> } -> c_int + { addr: sockaddr, addrlen: Result<socklen_t, InspectError> }
+    { sockfd: RawFd, addrlen: InspectResult<socklen_t> } -> c_int + { addr: sockaddr, addrlen: InspectResult<socklen_t> }
     ~ [Network] for [x86_64: 51, aarch64: 204, riscv64: 204],
   getsockopt(sockfd: RawFd, level: c_int, optname: c_int, optval: *mut c_void, optlen: *mut socklen_t) /
-    { sockfd: RawFd, level: c_int, optname: c_int, optlen: Result<socklen_t, InspectError> }
-    -> c_int + { optval: Vec<u8>, optlen: Result<socklen_t, InspectError> }
+    { sockfd: RawFd, level: c_int, optname: c_int, optlen: InspectResult<socklen_t> }
+    -> c_int + { optval: Vec<u8>, optlen: InspectResult<socklen_t> }
     ~ [Network] for [x86_64: 55, aarch64: 209, riscv64: 209],
   gettid() / {} -> pid_t ~ [Pure] for [x86_64: 186, aarch64: 178, riscv64: 178],
   gettimeofday(tv: *mut timeval, tz: *mut timezone) / {} -> c_int + { tv: timeval, tz: Option<timezone> } ~ [Clock] for [x86_64: 96, aarch64: 169, riscv64: 169],
@@ -390,9 +390,9 @@ gen_syscalls! {
     { path: PathBuf, name: CString, value: CString, size: size_t, flags: c_int } -> c_int ~ [File] for [x86_64: 189, aarch64: 6, riscv64: 6],
   // lsm: https://lwn.net/Articles/919545/
   // TODO: how to deal with DST arrays?
-  lsm_get_self_attr(attr: c_uint, ctx: *mut c_void, size: *mut u32, flags: u32) / { attr: c_uint, size: Result<u32, InspectError>, flags: u32 }
+  lsm_get_self_attr(attr: c_uint, ctx: *mut c_void, size: *mut u32, flags: u32) / { attr: c_uint, size: InspectResult<u32>, flags: u32 }
     -> c_int + { ctx: Vec<u8> } ~ [] for [x86_64: 459, aarch64: 459, riscv64: 459],
-  lsm_list_modules(ids: *mut u64, size: *mut u32, flags: u32) / { size: Result<u32, InspectError>, flags: u32 }
+  lsm_list_modules(ids: *mut u64, size: *mut u32, flags: u32) / { size: InspectResult<u32>, flags: u32 }
     -> c_int + { ids: Vec<u64> } ~ [] for [x86_64: 461, aarch64: 461, riscv64: 461],
   lsm_set_self_attr(attr: c_uint, ctx: *const c_void, size: u32, flags: u32) /
     { attr: c_uint, ctx: Vec<u8>, size: u32, flags: u32 } -> c_int ~ [] for [x86_64: 460, aarch64: 460, riscv64: 460],
@@ -854,7 +854,7 @@ gen_syscalls! {
     ~ [Signal, Process] for [x86_64: 234, aarch64: 131, riscv64: 131],
   time(tloc: *mut time_t) / { } -> time_t + { tloc: Option<time_t> } ~ [Clock] for [x86_64: 201],
   timer_create(clockid: clockid_t, sevp: *const sigevent, timerid: *mut timer_t) /
-    { clockid: clockid_t, sevp: Option<sigevent> } -> c_int + { timerid: Result<timer_t, InspectError> }
+    { clockid: clockid_t, sevp: Option<sigevent> } -> c_int + { timerid: InspectResult<timer_t> }
     ~ [] for [x86_64: 222, aarch64: 107, riscv64: 107],
   timer_delete(timerid: timer_t) / { timerid: timer_t } -> c_int ~ [] for [x86_64: 226, aarch64: 111, riscv64: 111],
   timer_getoverrun(timerid: timer_t) / { timerid: timer_t } -> c_int ~ [] for [x86_64: 225, aarch64: 109, riscv64: 109],
@@ -909,7 +909,7 @@ gen_syscalls! {
     { fd: RawFd, iov: Vec<iovec> @ counted_by(nr_segs), flags: c_uint } -> ssize_t
     ~ [Desc] for [x86_64: 278, aarch64: 75, riscv64: 75],
   wait4(pid: pid_t, wstatus: *mut c_int, options: c_int, rusage: *mut rusage) /
-    { pid: pid_t, options: c_int } -> pid_t + { wstatus: Result<c_int, InspectError>, rusage: Option<rusage> }
+    { pid: pid_t, options: c_int } -> pid_t + { wstatus: InspectResult<c_int>, rusage: Option<rusage> }
     ~ [Process] for [x86_64: 61, aarch64: 260, riscv64: 260],
   waitid(idtype: idtype_t, id: id_t, infop: *mut siginfo_t, options: c_int) /
     { idtype: idtype_t, id: id_t, options: c_int } -> c_int + { infop: Option<siginfo_t> }

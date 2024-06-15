@@ -1,7 +1,7 @@
 use std::{
   collections::BTreeMap,
   ffi::{CString, OsString},
-  mem::size_of,
+  mem::{size_of, MaybeUninit},
   os::unix::prelude::OsStringExt,
   path::PathBuf,
   sync::Arc,
@@ -10,7 +10,10 @@ use std::{
 use nix::{
   errno::Errno,
   libc::{
-    c_long, epoll_event, fd_set, iocb, iovec, itimerspec, itimerval, mmsghdr, mq_attr, msghdr, msqid_ds, open_how, pollfd, rlimit, rlimit64, rusage, sched_attr, sched_param, sembuf, shmid_ds, sigaction, sigevent, siginfo_t, sigset_t, sockaddr, stack_t, stat, statfs, statx, sysinfo, timespec, timeval, timex, tms, utimbuf, utsname
+    c_long, epoll_event, fd_set, iocb, iovec, itimerspec, itimerval, mmsghdr, mq_attr, msghdr,
+    msqid_ds, open_how, pollfd, rlimit, rlimit64, rusage, sched_attr, sched_param, sembuf,
+    shmid_ds, sigaction, sigevent, siginfo_t, sigset_t, sockaddr, stack_t, stat, statfs, statx,
+    sysinfo, timespec, timeval, timex, tms, utimbuf, utsname,
   },
   sys::ptrace::{self, AddressType},
   unistd::Pid,
@@ -19,9 +22,21 @@ use nix::{
 use crate::{
   arch::PtraceRegisters,
   types::{
-    __aio_sigset, __mount_arg, cachestat, cachestat_range, cap_user_data, cap_user_header, futex_waitv, io_event, io_uring_params, kexec_segment, landlock_ruleset_attr, linux_dirent, linux_dirent64, mnt_id_req, mount_attr, rseq, statmount, timezone, ustat
+    __aio_sigset, __mount_arg, cachestat, cachestat_range, cap_user_data, cap_user_header,
+    futex_waitv, io_event, io_uring_params, kexec_segment, landlock_ruleset_attr, linux_dirent,
+    linux_dirent64, mnt_id_req, mount_attr, rseq, statmount, timezone, ustat,
   },
 };
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum InspectError<T: Clone + PartialEq> {
+  /// The syscall failed thus the sysexit-stop inspection is not done.
+  SyscallFailure,
+  /// Ptrace failed when trying to inspect the tracee memory.
+  PtraceFailure { errno: Errno, incomplete: Option<T> },
+}
+
+pub type InspectResult<T> = Result<T, InspectError<T>>;
 
 /// Inspect the registers captured by ptrace and return the inspection result.
 pub trait FromInspectingRegs {
@@ -44,26 +59,27 @@ pub trait InspectFromPid {
   fn inspect_from(pid: Pid, address: AddressType) -> Self;
 }
 
-pub type InspectError = Errno;
-
-impl InspectFromPid for Result<CString, InspectError> {
+impl InspectFromPid for InspectResult<CString> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     read_cstring(pid, address)
   }
 }
 
-pub fn read_generic_string<TString>(
+pub fn read_generic_string<TString: Clone + PartialEq>(
   pid: Pid,
   address: AddressType,
   ctor: impl Fn(Vec<u8>) -> TString,
-) -> Result<TString, InspectError> {
+) -> InspectResult<TString> {
   let mut buf = Vec::new();
   let mut address = address;
   const WORD_SIZE: usize = size_of::<c_long>();
   loop {
     let word = match ptrace::read(pid, address) {
       Err(e) => {
-        return Err(e);
+        return Err(InspectError::PtraceFailure {
+          errno: e,
+          incomplete: Some(ctor(buf)),
+        });
       }
       Ok(word) => word,
     };
@@ -79,344 +95,355 @@ pub fn read_generic_string<TString>(
 }
 
 #[allow(unused)]
-pub fn read_cstring(pid: Pid, address: AddressType) -> Result<CString, InspectError> {
+pub fn read_cstring(pid: Pid, address: AddressType) -> InspectResult<CString> {
   read_generic_string(pid, address, |x| CString::new(x).unwrap())
 }
 
-pub fn read_pathbuf(pid: Pid, address: AddressType) -> Result<PathBuf, InspectError> {
+pub fn read_pathbuf(pid: Pid, address: AddressType) -> InspectResult<PathBuf> {
   read_generic_string(pid, address, |x| PathBuf::from(OsString::from_vec(x)))
 }
 
-pub fn read_lossy_string(pid: Pid, address: AddressType) -> Result<String, InspectError> {
+pub fn read_lossy_string(pid: Pid, address: AddressType) -> InspectResult<String> {
   // Waiting on https://github.com/rust-lang/libs-team/issues/116
   read_generic_string(pid, address, |x| String::from_utf8_lossy(&x).into_owned())
 }
 
-pub fn read_null_ended_array<TItem>(
+pub fn read_null_ended_array<TItem: Clone + PartialEq>(
   pid: Pid,
   mut address: AddressType,
-  reader: impl Fn(Pid, AddressType) -> Result<TItem, InspectError>,
-) -> Result<Vec<TItem>, InspectError> {
+  reader: impl Fn(Pid, AddressType) -> InspectResult<TItem>,
+) -> InspectResult<Vec<TItem>> {
   let mut res = Vec::new();
   const WORD_SIZE: usize = size_of::<c_long>();
   loop {
     let ptr = match ptrace::read(pid, address) {
-      Err(e) => {
-        return Err(e);
+      Err(errno) => {
+        return Err(InspectError::PtraceFailure {
+          errno,
+          incomplete: Some(res),
+        });
       }
       Ok(ptr) => ptr,
     };
     if ptr == 0 {
       return Ok(res);
     } else {
-      res.push(reader(pid, ptr as AddressType)?);
+      match reader(pid, ptr as AddressType) {
+        Ok(item) => res.push(item),
+        Err(InspectError::PtraceFailure {
+          errno,
+          incomplete: _,
+        }) => {
+          return Err(InspectError::PtraceFailure {
+            errno,
+            incomplete: Some(res),
+          })
+        }
+        Err(InspectError::SyscallFailure) => return Err(InspectError::SyscallFailure),
+      };
     }
     address = unsafe { address.add(WORD_SIZE) };
   }
 }
 
 #[allow(unused)]
-pub fn read_cstring_array(pid: Pid, address: AddressType) -> Result<Vec<CString>, InspectError> {
+pub fn read_cstring_array(pid: Pid, address: AddressType) -> InspectResult<Vec<CString>> {
   read_null_ended_array(pid, address, read_cstring)
 }
 
-pub fn read_lossy_string_array(
-  pid: Pid,
-  address: AddressType,
-) -> Result<Vec<String>, InspectError> {
+pub fn read_lossy_string_array(pid: Pid, address: AddressType) -> InspectResult<Vec<String>> {
   read_null_ended_array(pid, address, read_lossy_string)
 }
 
-impl InspectFromPid for Result<sockaddr, InspectError> {
+impl InspectFromPid for InspectResult<sockaddr> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<PathBuf, InspectError> {
+impl InspectFromPid for InspectResult<PathBuf> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<Vec<u8>, InspectError> {
+impl InspectFromPid for InspectResult<Vec<u8>> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<timex, InspectError> {
+impl InspectFromPid for InspectResult<timex> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<cap_user_data, InspectError> {
+impl InspectFromPid for InspectResult<cap_user_data> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<cap_user_header, InspectError> {
+impl InspectFromPid for InspectResult<cap_user_header> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<timespec, InspectError> {
+impl InspectFromPid for InspectResult<timespec> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<stack_t, InspectError> {
+impl InspectFromPid for InspectResult<stack_t> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<mnt_id_req, InspectError> {
+impl InspectFromPid for InspectResult<mnt_id_req> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<shmid_ds, InspectError> {
+impl InspectFromPid for InspectResult<shmid_ds> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<cachestat, InspectError> {
+impl InspectFromPid for InspectResult<cachestat> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<cachestat_range, InspectError> {
+impl InspectFromPid for InspectResult<cachestat_range> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<statx, InspectError> {
+impl InspectFromPid for InspectResult<statx> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-
-impl InspectFromPid for Result<utimbuf, InspectError> {
+impl InspectFromPid for InspectResult<utimbuf> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<ustat, InspectError> {
+impl InspectFromPid for InspectResult<ustat> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<utsname, InspectError> {
+impl InspectFromPid for InspectResult<utsname> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<itimerspec, InspectError> {
+impl InspectFromPid for InspectResult<itimerspec> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<tms, InspectError> {
+impl InspectFromPid for InspectResult<tms> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<sysinfo, InspectError> {
+impl InspectFromPid for InspectResult<sysinfo> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<nix::libc::clone_args, InspectError> {
+impl InspectFromPid for InspectResult<nix::libc::clone_args> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<i64, InspectError> {
+impl InspectFromPid for InspectResult<i64> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<u64, InspectError> {
+impl InspectFromPid for InspectResult<u64> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<AddressType, InspectError> {
+impl InspectFromPid for InspectResult<AddressType> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<u32, InspectError> {
+impl InspectFromPid for InspectResult<u32> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<Arc<rseq>, InspectError> {
+impl InspectFromPid for InspectResult<Arc<rseq>> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<Arc<statmount>, InspectError> {
+impl InspectFromPid for InspectResult<Arc<statmount>> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<i32, InspectError> {
+impl InspectFromPid for InspectResult<i32> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<sched_attr, InspectError> {
+impl InspectFromPid for InspectResult<sched_attr> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<sembuf, InspectError> {
+impl InspectFromPid for InspectResult<sembuf> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<sched_param, InspectError> {
+impl InspectFromPid for InspectResult<sched_param> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<sigaction, InspectError> {
+impl InspectFromPid for InspectResult<sigaction> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<epoll_event, InspectError> {
+impl InspectFromPid for InspectResult<epoll_event> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<stat, InspectError> {
+impl InspectFromPid for InspectResult<stat> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<statfs, InspectError> {
+impl InspectFromPid for InspectResult<statfs> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<futex_waitv, InspectError> {
+impl InspectFromPid for InspectResult<futex_waitv> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<itimerval, InspectError> {
+impl InspectFromPid for InspectResult<itimerval> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<iocb, InspectError> {
+impl InspectFromPid for InspectResult<iocb> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<__aio_sigset, InspectError> {
+impl InspectFromPid for InspectResult<__aio_sigset> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<io_uring_params, InspectError> {
+impl InspectFromPid for InspectResult<io_uring_params> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<io_event, InspectError> {
+impl InspectFromPid for InspectResult<io_event> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<kexec_segment, InspectError> {
+impl InspectFromPid for InspectResult<kexec_segment> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<rlimit, InspectError> {
+impl InspectFromPid for InspectResult<rlimit> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<rusage, InspectError> {
+impl InspectFromPid for InspectResult<rusage> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<timezone, InspectError> {
+impl InspectFromPid for InspectResult<timezone> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<linux_dirent, InspectError> {
+impl InspectFromPid for InspectResult<linux_dirent> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<linux_dirent64, InspectError> {
+impl InspectFromPid for InspectResult<linux_dirent64> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<landlock_ruleset_attr, InspectError> {
+impl InspectFromPid for InspectResult<landlock_ruleset_attr> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<__mount_arg, InspectError> {
+impl InspectFromPid for InspectResult<__mount_arg> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-// impl<T> InspectFromPid for Result<T, InspectError>
+// impl<T> InspectFromPid for InspectResult<T>
 // where
 //   T: Sized,
 // {
@@ -426,130 +453,138 @@ impl InspectFromPid for Result<__mount_arg, InspectError> {
 // }
 
 #[cfg(target_arch = "x86_64")]
-impl InspectFromPid for Result<crate::types::user_desc, InspectError> {
+impl InspectFromPid for InspectResult<crate::types::user_desc> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<timeval, InspectError> {
+impl InspectFromPid for InspectResult<timeval> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<mount_attr, InspectError> {
+impl InspectFromPid for InspectResult<mount_attr> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<mq_attr, InspectError> {
+impl InspectFromPid for InspectResult<mq_attr> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<iovec, InspectError> {
+impl InspectFromPid for InspectResult<iovec> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<rlimit64, InspectError> {
+impl InspectFromPid for InspectResult<rlimit64> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<siginfo_t, InspectError> {
+impl InspectFromPid for InspectResult<siginfo_t> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<pollfd, InspectError> {
+impl InspectFromPid for InspectResult<pollfd> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<fd_set, InspectError> {
+impl InspectFromPid for InspectResult<fd_set> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<open_how, InspectError> {
+impl InspectFromPid for InspectResult<open_how> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<msqid_ds, InspectError> {
+impl InspectFromPid for InspectResult<msqid_ds> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<sigevent, InspectError> {
+impl InspectFromPid for InspectResult<sigevent> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<mmsghdr, InspectError> {
+impl InspectFromPid for InspectResult<mmsghdr> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<msghdr, InspectError> {
+impl InspectFromPid for InspectResult<msghdr> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
 #[cfg(target_arch = "riscv64")]
-impl InspectFromPid for Result<crate::types::riscv_hwprobe, InspectError> {
+impl InspectFromPid for InspectResult<crate::types::riscv_hwprobe> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl<T> InspectFromPid for Result<Vec<T>, InspectError>
+impl<T: Clone + PartialEq> InspectFromPid for InspectResult<Vec<T>>
 where
-  Result<T, InspectError>: InspectFromPid,
+  InspectResult<T>: InspectFromPid,
 {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl<T> InspectFromPid for Result<[T; 2], InspectError>
+impl<T: Clone + PartialEq> InspectFromPid for InspectResult<[T; 2]>
 where
-  Result<T, InspectError>: InspectFromPid,
+  InspectResult<T>: InspectFromPid,
 {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl InspectFromPid for Result<sigset_t, InspectError> {
+impl InspectFromPid for InspectResult<sigset_t> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
 }
 
-impl<T> InspectFromPid for Result<Option<T>, InspectError>
+impl<T: Clone + PartialEq> InspectFromPid for InspectResult<Option<T>>
 where
-  Result<T, InspectError>: InspectFromPid,
+  InspectResult<T>: InspectFromPid,
 {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     if address.is_null() {
       Ok(None)
     } else {
-      Ok(Some(Result::<T, InspectError>::inspect_from(pid, address)?))
+      Ok(Some(
+        InspectResult::<T>::inspect_from(pid, address).map_err(|e| match e {
+          InspectError::SyscallFailure => InspectError::SyscallFailure,
+          InspectError::PtraceFailure { errno, incomplete } => InspectError::PtraceFailure {
+            errno,
+            incomplete: Some(incomplete),
+          },
+        })?,
+      ))
     }
   }
 }

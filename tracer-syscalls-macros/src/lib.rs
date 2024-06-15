@@ -645,7 +645,7 @@ fn wrap_syscall_arg_type(
   crate_token: proc_macro2::TokenStream,
 ) -> (proc_macro2::TokenStream, bool) {
   match ty {
-    Type::Array(ty) => (quote!(Result<#ty, #crate_token::InspectError>), true),
+    Type::Array(ty) => (quote!(InspectResult<#ty>), true),
     Type::Path(ty) => {
       assert_eq!(ty.path.segments.len(), 1);
       let ty = &ty.path.segments[0];
@@ -703,7 +703,7 @@ fn wrap_syscall_arg_type(
         | "ustat"
         | "shmid_ds"
         | "cachestat"
-        | "cachestat_range" => (quote!(Result<#ty, #crate_token::InspectError>), true),
+        | "cachestat_range" => (quote!(InspectResult<#ty>), true),
         _ => {
           if ty.ident == "Option" {
             let PathArguments::AngleBracketed(arg) = &ty.arguments else {
@@ -716,7 +716,7 @@ fn wrap_syscall_arg_type(
               | "sigset_t" | "iovec" | "rlimit64" | "fd_set" | "sockaddr" | "sigaction"
               | "timeval" | "itimerval" | "stack_t" | "timer_t" | "time_t" | "sigevent"
               | "itimerspec" | "utimbuf" | "[timespec; 2]" | "[timeval; 2]" | "rusage" => {
-                (quote!(Result<#ty, #crate_token::InspectError>), true)
+                (quote!(InspectResult<#ty>), true)
               }
               _ => panic!("Unsupported inner syscall arg type: {:?}", arg),
             }
@@ -730,11 +730,11 @@ fn wrap_syscall_arg_type(
               | "linux_dirent" | "io_event" | "linux_dirent64" | "gid_t" | "AddressType"
               | "kexec_segment" | "c_uchar" | "u64" | "mount_attr" | "pollfd" | "iovec"
               | "riscv_hwprobe" | "mmsghdr" | "sembuf" => {
-                (quote!(Result<#ty, #crate_token::InspectError>), true)
+                (quote!(InspectResult<#ty>), true)
               }
               _ => panic!("Unsupported inner syscall arg type: {:?}", arg),
             }
-          } else if ty.ident == "Result" {
+          } else if ty.ident == "InspectResult" {
             (quote!(#ty), true)
           } else if ty.ident == "Arc" {
             let PathArguments::AngleBracketed(arg) = &ty.arguments else {
@@ -742,7 +742,7 @@ fn wrap_syscall_arg_type(
             };
             let arg = arg.args.to_token_stream().to_string();
             match arg.as_str() {
-              "rseq" | "statmount" => (quote!(Result<#ty, #crate_token::InspectError>), true),
+              "rseq" | "statmount" => (quote!(InspectResult<#ty>), true),
               _ => panic!("Unsupported inner syscall arg type: {:?}", arg),
             }
           } else {
