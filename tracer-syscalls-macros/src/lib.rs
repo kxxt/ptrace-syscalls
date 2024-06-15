@@ -5,7 +5,8 @@ use proc_macro_crate::{crate_name, FoundCrate};
 use quote::{format_ident, quote, ToTokens};
 use syn::{
   braced, bracketed, parenthesized, parse::Parse, parse_macro_input, punctuated::Punctuated,
-  spanned::Spanned, token, Expr, Field, Ident, PathArguments, Token, Type, TypePath,
+  spanned::Spanned, token, Expr, Field, GenericArgument, Ident, PathArguments, Token, Type,
+  TypePath,
 };
 
 struct ModifiedArgsExpr {
@@ -648,7 +649,10 @@ fn wrap_syscall_arg_type(
   crate_token: proc_macro2::TokenStream,
 ) -> (proc_macro2::TokenStream, bool) {
   match ty {
-    Type::Array(ty) => (quote!(InspectResult<#ty>), true),
+    Type::Array(ty) => {
+      let element_ty = &ty.elem;
+      (quote!(Result<#ty, InspectError<Vec<#element_ty>>>), true)
+    },
     Type::Path(ty) => {
       assert_eq!(ty.path.segments.len(), 1);
       let ty = &ty.path.segments[0];
@@ -712,16 +716,24 @@ fn wrap_syscall_arg_type(
             let PathArguments::AngleBracketed(arg) = &ty.arguments else {
               panic!("Unsupported syscall arg type: {:?}", ty_str);
             };
-            let arg = arg.args.to_token_stream().to_string();
-            match arg.as_str() {
+            let argstr = arg.args.to_token_stream().to_string();
+            match argstr.as_str() {
               "PathBuf" | "timespec" | "Vec < CString >" | "CString" | "Vec < c_ulong >"
               | "Vec < c_uint >" | "Vec < gid_t >" | "timezone" | "mq_attr" | "siginfo_t"
               | "sigset_t" | "iovec" | "rlimit64" | "fd_set" | "sockaddr" | "sigaction"
               | "timeval" | "itimerval" | "stack_t" | "timer_t" | "time_t" | "sigevent"
-              | "itimerspec" | "utimbuf" | "[timespec; 2]" | "[timeval; 2]" | "rusage" => {
-                (quote!(InspectResult<#ty>), true)
+              | "itimerspec" | "utimbuf" | "rusage" => (quote!(InspectResult<#ty>), true),
+              "[timespec; 2]" | "[timeval; 2]" => {
+                let GenericArgument::Type(inner) = arg.args.first().unwrap() else {
+                  panic!("Unsupported inner syscall arg type: {:?}", argstr);
+                };
+                let Type::Array(inner) = inner else {
+                  panic!("Unsupported inner syscall arg type: {:?}", argstr)
+                };
+                let element_ty = &inner.elem;
+                (quote!(Result<#ty, InspectError<Vec<#element_ty>>>), true)
               }
-              _ => panic!("Unsupported inner syscall arg type: {:?}", arg),
+              _ => panic!("Unsupported inner syscall arg type: {:?}", argstr),
             }
           } else if ty.ident == "Vec" {
             let PathArguments::AngleBracketed(arg) = &ty.arguments else {
@@ -732,9 +744,7 @@ fn wrap_syscall_arg_type(
               "c_int" | "u8" | "CString" | "epoll_event" | "futex_waitv" | "c_ulong"
               | "linux_dirent" | "io_event" | "linux_dirent64" | "gid_t" | "AddressType"
               | "kexec_segment" | "c_uchar" | "u64" | "mount_attr" | "pollfd" | "iovec"
-              | "riscv_hwprobe" | "mmsghdr" | "sembuf" => {
-                (quote!(InspectResult<#ty>), true)
-              }
+              | "riscv_hwprobe" | "mmsghdr" | "sembuf" => (quote!(InspectResult<#ty>), true),
               _ => panic!("Unsupported inner syscall arg type: {:?}", arg),
             }
           } else if ty.ident == "InspectResult" {

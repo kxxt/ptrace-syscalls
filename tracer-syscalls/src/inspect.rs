@@ -7,6 +7,7 @@ use std::{
   sync::Arc,
 };
 
+use itertools::chain;
 use nix::{
   errno::Errno,
   libc::{
@@ -264,12 +265,36 @@ where
   }
 }
 
-impl<T: Clone + PartialEq> InspectFromPid for InspectResult<[T; 2]>
+impl<T: Clone + PartialEq> InspectFromPid for Result<[T; 2], InspectError<Vec<T>>>
 where
   InspectResult<T>: InspectFromPid,
 {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
+    let item1 = InspectResult::<T>::inspect_from(pid, address).map_err(|e| match e {
+      InspectError::SyscallFailure => InspectError::SyscallFailure,
+      InspectError::PtraceFailure { errno, incomplete } => InspectError::PtraceFailure {
+        errno,
+        incomplete: Some(incomplete.into_iter().collect::<Vec<T>>()),
+      },
+    })?;
+    let item2 = match InspectResult::<T>::inspect_from(pid, unsafe { address.add(size_of::<T>()) })
+    {
+      Ok(t) => t,
+      Err(e) => match e {
+        InspectError::SyscallFailure => return Err(InspectError::SyscallFailure),
+        InspectError::PtraceFailure { errno, incomplete } => {
+          return Err(InspectError::PtraceFailure {
+            errno,
+            incomplete: Some(
+              chain!(Some(item1), incomplete)
+                .into_iter()
+                .collect::<Vec<T>>(),
+            ),
+          })
+        }
+      },
+    };
+    Ok([item1, item2])
   }
 }
 
@@ -289,6 +314,28 @@ where
             incomplete: Some(incomplete),
           },
         })?,
+      ))
+    }
+  }
+}
+
+impl<T: Clone + PartialEq> InspectFromPid for Result<Option<[T; 2]>, InspectError<Vec<T>>>
+where
+  Result<[T; 2], InspectError<Vec<T>>>: InspectFromPid,
+{
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    if address.is_null() {
+      Ok(None)
+    } else {
+      Ok(Some(
+        Result::<[T; 2], InspectError<Vec<T>>>::inspect_from(pid, address).map_err(
+          |e| match e {
+            InspectError::SyscallFailure => InspectError::SyscallFailure,
+            InspectError::PtraceFailure { errno, incomplete } => {
+              InspectError::PtraceFailure { errno, incomplete }
+            }
+          },
+        )?,
       ))
     }
   }
