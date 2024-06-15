@@ -2,7 +2,7 @@ use std::{
   collections::BTreeMap,
   ffi::{CString, OsString},
   mem::{size_of, MaybeUninit},
-  os::unix::prelude::OsStringExt,
+  os::{raw::c_void, unix::prelude::OsStringExt},
   path::PathBuf,
   sync::Arc,
 };
@@ -10,10 +10,10 @@ use std::{
 use nix::{
   errno::Errno,
   libc::{
-    c_long, epoll_event, fd_set, iocb, iovec, itimerspec, itimerval, mmsghdr, mq_attr, msghdr,
-    msqid_ds, open_how, pollfd, rlimit, rlimit64, rusage, sched_attr, sched_param, sembuf,
-    shmid_ds, sigaction, sigevent, siginfo_t, sigset_t, sockaddr, stack_t, stat, statfs, statx,
-    sysinfo, timespec, timeval, timex, tms, utimbuf, utsname,
+    c_int, c_long, clone_args, epoll_event, fd_set, iocb, iovec, itimerspec, itimerval, mmsghdr,
+    mq_attr, msghdr, msqid_ds, open_how, pollfd, rlimit, rlimit64, rusage, sched_attr, sched_param,
+    sembuf, shmid_ds, sigaction, sigevent, siginfo_t, sigset_t, sockaddr, stack_t, stat, statfs,
+    statx, sysinfo, timespec, timeval, timex, tms, utimbuf, utsname,
   },
   sys::ptrace::{self, AddressType},
   unistd::Pid,
@@ -47,11 +47,73 @@ pub(crate) trait SyscallStopInspect: Copy {
 }
 
 /// Use ptrace to inspect the process with the given pid and return the inspection result.
-///
-/// This trait is implemented for syscall args structs intended to be used to gather syscall
-/// arguments in ptrace syscall-enter-stop.
-pub trait InspectFromPid {
+pub(crate) trait InspectFromPid {
   fn inspect_from(pid: Pid, address: AddressType) -> Self;
+}
+
+const WORD_SIZE: usize = size_of::<c_long>();
+
+#[repr(transparent)]
+#[derive(Debug, Clone, PartialEq)]
+struct SizedWrapper<T>(T);
+
+impl<T: Clone + PartialEq> InspectFromPid for InspectResult<SizedWrapper<T>> {
+  fn inspect_from(pid: Pid, mut address: AddressType) -> Self {
+    let mut buf = MaybeUninit::<T>::uninit();
+    let mut ptr = buf.as_mut_ptr() as *mut c_long;
+    let ptr_end = unsafe { ptr.add(size_of::<T>()) };
+    while ptr < ptr_end {
+      let word = match ptrace::read(pid, address) {
+        Err(errno) => {
+          return Err(InspectError::PtraceFailure {
+            errno,
+            incomplete: None,
+          });
+        }
+        Ok(word) => word,
+      };
+      let remain = unsafe { ptr_end.offset_from(ptr) } as usize;
+      if remain < WORD_SIZE {
+        let word_bytes = word.to_ne_bytes();
+        for (idx, &byte) in word_bytes.iter().take(remain).enumerate() {
+          unsafe {
+            let ptr = (ptr as *mut u8).add(idx);
+            *ptr = byte;
+          }
+        }
+        break;
+      } else {
+        unsafe {
+          *ptr = word;
+          ptr = ptr.add(WORD_SIZE);
+          address = address.add(WORD_SIZE);
+        }
+      }
+    }
+    unsafe { Ok(SizedWrapper(buf.assume_init())) }
+  }
+}
+
+macro_rules! impl_inspect_for_sized {
+  ($($ty:ty),*) => {
+    $(
+      impl InspectFromPid for InspectResult<$ty> {
+        fn inspect_from(pid: Pid, address: AddressType) -> Self {
+          InspectResult::<SizedWrapper<$ty>>::inspect_from(pid, address)
+            .map(|x|x.0)
+            .map_err(
+              |e| match e {
+                InspectError::SyscallFailure => InspectError::SyscallFailure,
+                InspectError::PtraceFailure { errno, incomplete } => InspectError::PtraceFailure {
+                  errno,
+                  incomplete: incomplete.map(|x|x.0),
+                },
+              }
+            )
+        }
+      }
+    )*
+  };
 }
 
 impl InspectFromPid for InspectResult<CString> {
@@ -67,7 +129,6 @@ pub fn read_generic_string<TString: Clone + PartialEq>(
 ) -> InspectResult<TString> {
   let mut buf = Vec::new();
   let mut address = address;
-  const WORD_SIZE: usize = size_of::<c_long>();
   loop {
     let word = match ptrace::read(pid, address) {
       Err(e) => {
@@ -150,12 +211,6 @@ pub fn read_lossy_string_array(pid: Pid, address: AddressType) -> InspectResult<
   read_null_ended_array(pid, address, read_lossy_string)
 }
 
-impl InspectFromPid for InspectResult<sockaddr> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
 impl InspectFromPid for InspectResult<PathBuf> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
@@ -163,132 +218,6 @@ impl InspectFromPid for InspectResult<PathBuf> {
 }
 
 impl InspectFromPid for InspectResult<Vec<u8>> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<timex> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<cap_user_data> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<cap_user_header> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<timespec> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<stack_t> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<mnt_id_req> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<shmid_ds> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<cachestat> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<cachestat_range> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<statx> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<utimbuf> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<ustat> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<utsname> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<itimerspec> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<tms> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<sysinfo> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<nix::libc::clone_args> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<i64> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<u64> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<AddressType> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<u32> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
@@ -306,237 +235,24 @@ impl InspectFromPid for InspectResult<Arc<statmount>> {
   }
 }
 
-impl InspectFromPid for InspectResult<i32> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
+impl_inspect_for_sized! {
+  i32, u32, i64, u64, sockaddr, timex, cap_user_data, cap_user_header, timespec, stack_t, mnt_id_req,
+  shmid_ds, cachestat, cachestat_range, statx, utimbuf, ustat, utsname, itimerspec, tms,
+  sysinfo, clone_args, AddressType, sched_attr, sembuf, sched_param, sigaction, epoll_event, stat,
+  statfs, futex_waitv, itimerval, iocb, __aio_sigset, io_uring_params, io_event, kexec_segment,
+  rlimit, rusage, timezone, linux_dirent, linux_dirent64, landlock_ruleset_attr, __mount_arg,
+  timeval, mount_attr, mq_attr, iovec, rlimit64, siginfo_t, pollfd, fd_set, open_how, msqid_ds,
+  sigevent, mmsghdr, msghdr, sigset_t
 }
-
-impl InspectFromPid for InspectResult<sched_attr> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<sembuf> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<sched_param> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<sigaction> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<epoll_event> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<stat> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<statfs> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<futex_waitv> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<itimerval> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<iocb> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<__aio_sigset> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<io_uring_params> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<io_event> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<kexec_segment> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<rlimit> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<rusage> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<timezone> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<linux_dirent> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<linux_dirent64> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<landlock_ruleset_attr> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<__mount_arg> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-// impl<T> InspectFromPid for InspectResult<T>
-// where
-//   T: Sized,
-// {
-//   fn inspect_from(pid: Pid, address: AddressType) -> Self {
-//     todo!()
-//   }
-// }
 
 #[cfg(target_arch = "x86_64")]
-impl InspectFromPid for InspectResult<crate::types::user_desc> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<timeval> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<mount_attr> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<mq_attr> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<iovec> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<rlimit64> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<siginfo_t> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<pollfd> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<fd_set> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<open_how> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<msqid_ds> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<sigevent> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<mmsghdr> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<msghdr> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
+impl_inspect_for_sized! {
+  crate::types::user_desc
 }
 
 #[cfg(target_arch = "riscv64")]
-impl InspectFromPid for InspectResult<crate::types::riscv_hwprobe> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
+impl_inspect_for_sized! {
+  crate::types::riscv_hwprobe
 }
 
 impl<T: Clone + PartialEq> InspectFromPid for InspectResult<Vec<T>>
@@ -552,12 +268,6 @@ impl<T: Clone + PartialEq> InspectFromPid for InspectResult<[T; 2]>
 where
   InspectResult<T>: InspectFromPid,
 {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
-  }
-}
-
-impl InspectFromPid for InspectResult<sigset_t> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
   }
