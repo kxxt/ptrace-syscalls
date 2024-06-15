@@ -1,4 +1,5 @@
 #![allow(non_upper_case_globals)]
+#![allow(unused)]
 
 use std::path::PathBuf;
 use std::{
@@ -329,7 +330,7 @@ gen_syscalls! {
     -> c_int + { events: Vec<io_event> } ~ [] for [x86_64: 333, aarch64: 292, riscv64: 292],
   // io_pgetevents_time64
   io_setup(nr_events: c_ulong, ctx_idp: *mut aio_context_t) / { nr_events: c_ulong }
-    -> c_int + { ctx_idp: aio_context_t } ~ [Memory] for [x86_64: 206, aarch64: 0, riscv64: 0],
+    -> c_int + { ctx_idp: InspectResult<aio_context_t> } ~ [Memory] for [x86_64: 206, aarch64: 0, riscv64: 0],
   // io_submit: iocbpp is an array of iocb pointers. TODO: how to handle it?
   io_submit(ctx_id: aio_context_t, nr: c_long, iocbpp: *mut *mut iocb) /
     { ctx_id: aio_context_t, nr: c_long, iocbpp: Vec<AddressType> } -> c_int ~ [] for [x86_64: 209, aarch64: 2, riscv64: 2],
@@ -490,7 +491,7 @@ gen_syscalls! {
   munmap(addr: *mut c_void, length: size_t) / { addr: AddressType, length: size_t } -> c_int ~ [Memory] for [x86_64: 11, aarch64: 215, riscv64: 215],
   // TODO: DST file_handle
   name_to_handle_at(dirfd: RawFd, pathname: *const c_char, handle: *mut c_void, mount_id: *mut c_int, flags: c_int) /
-    { dirfd: RawFd, pathname: PathBuf, flags: c_int } -> c_int + { handle: Vec<u8>, mount_id: c_int }
+    { dirfd: RawFd, pathname: PathBuf, flags: c_int } -> c_int + { handle: Vec<u8>, mount_id: InspectResult<c_int> }
     ~ [Desc, File] for [x86_64: 303, aarch64: 264, riscv64: 264],
   nanosleep(req: *const timespec, rem: *mut timespec) / { req: timespec } -> c_int + { rem: Option<timespec> }
     ~ [Clock] for [x86_64: 35, aarch64: 230, riscv64: 230],
@@ -717,7 +718,7 @@ gen_syscalls! {
   sendmsg(sockfd: RawFd, msg: *const msghdr, flags: c_int) / { sockfd: RawFd, flags: c_int, msg: msghdr } -> ssize_t
     ~ [Network] for [x86_64: 46, aarch64: 211, riscv64: 211],
   sendto(sockfd: RawFd, buf: *const c_void, len: size_t, flags: c_int, dest_addr: *const sockaddr, addrlen: socklen_t) /
-    { sockfd: RawFd, buf: Vec<u8> @ counted_by(len), flags: c_int, dest_addr: Option<sockaddr> } -> ssize_t + { }
+    { sockfd: RawFd, buf: Vec<u8> @ counted_by(len), flags: c_int, dest_addr: Option<sockaddr> } -> ssize_t
     ~ [Network] for [x86_64: 44, aarch64: 206, riscv64: 206],
   set_mempolicy(mode: c_int, nodemask: *const c_ulong, maxnode: c_ulong) /
     { mode: c_int,
