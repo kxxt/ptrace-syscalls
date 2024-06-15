@@ -1,8 +1,9 @@
 use convert_case::{Case, Casing};
 use paste::paste;
 use proc_macro::TokenStream;
+use proc_macro2::Span;
 use proc_macro_crate::{crate_name, FoundCrate};
-use quote::{format_ident, quote, ToTokens};
+use quote::{format_ident, quote, quote_spanned, ToTokens};
 use syn::{
   braced, bracketed, parenthesized, parse::Parse, parse_macro_input, punctuated::Punctuated,
   spanned::Spanned, token, Expr, Field, GenericArgument, Ident, PathArguments, Token, Type,
@@ -88,6 +89,7 @@ struct SyscallEntry {
   group_token: Token![~],
   bracket_token_2: token::Bracket,
   groups: Punctuated<Ident, Token![,]>,
+  span: Option<Span>,
 }
 
 impl Parse for SyscallEntry {
@@ -96,8 +98,14 @@ impl Parse for SyscallEntry {
     let raw_args;
     let archs_content;
     let groups_content;
+    let start;
+    let end;
     Ok(SyscallEntry {
-      name: input.parse()?,
+      name: {
+        let name: Ident = input.parse()?;
+        start = name.span();
+        name
+      },
       paren_token: parenthesized!(raw_args in input),
       raw_args: raw_args.parse_terminated(ArgField::parse, Token![,])?,
       separator: input.parse()?,
@@ -118,7 +126,12 @@ impl Parse for SyscallEntry {
       groups: groups_content.parse_terminated(Ident::parse, Token![,])?,
       for_token: input.parse()?,
       bracket_token: bracketed!(archs_content in input),
-      archs: archs_content.parse_terminated(Arch::parse, Token![,])?,
+      archs: {
+        let archs = archs_content.parse_terminated(Arch::parse, Token![,])?;
+        end = archs.last().unwrap().span;
+        archs
+      },
+      span: end.and_then(|end| start.join(end)),
     })
   }
 }
@@ -127,14 +140,26 @@ struct Arch {
   name: syn::Ident,
   colon: Token![:],
   number: syn::LitInt,
+  span: Option<Span>,
 }
 
 impl Parse for Arch {
   fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+    let start;
+    let end;
     Ok(Arch {
-      name: input.parse()?,
+      name: {
+        let name: Ident = input.parse()?;
+        start = name.span();
+        name
+      },
       colon: input.parse()?,
-      number: input.parse()?,
+      number: {
+        let number: syn::LitInt = input.parse()?;
+        end = number.span();
+        number
+      },
+      span: start.join(end),
     })
   }
 }
@@ -156,15 +181,16 @@ fn gen_syscall_args_struct(
   syscall: &SyscallEntry,
   crate_token: proc_macro2::TokenStream,
 ) -> GenSyscallArgsStructResult {
+  let span = syscall.span.clone().unwrap_or_else(|| Span::call_site());
   let name = &syscall.name;
   let args = &syscall.args;
   let groups_idents = &syscall.groups.iter().collect::<Vec<_>>();
   let groups = if groups_idents.is_empty() {
-    quote! {
+    quote_spanned! { span =>
       #crate_token::SyscallGroups::empty()
     }
   } else {
-    quote! {
+    quote_spanned! { span =>
       #(#crate_token::SyscallGroups::#groups_idents)|*
     }
   };
@@ -176,7 +202,7 @@ fn gen_syscall_args_struct(
     .skip(1)
     .map(|x| (x.name.to_string(), x.number.clone()))
     .unzip();
-  let syscall_number = quote! {
+  let syscall_number = quote_spanned! { span =>
     if cfg!(target_arch = #arch_name_0) {
       #arch_number_0
     }
@@ -209,12 +235,12 @@ fn gen_syscall_args_struct(
       wrap_syscall_arg_type(arg_type, crate_token.clone());
     wrapped_arg_types.push(wrapped_arg_type.clone());
     if !need_memory_inspection {
-      let inspect = quote! {
+      let inspect = quote_spanned! { span =>
         let #arg_name = raw_args.#arg_name as #wrapped_arg_type;
       };
       inspects.push(inspect);
     } else {
-      let inspect = quote! {
+      let inspect = quote_spanned! { span =>
         let #arg_name = #crate_token::InspectFromPid::inspect_from(inspectee_pid, raw_args.#arg_name as #crate_token::AddressType);
       };
       inspects.push(inspect);
@@ -229,38 +255,49 @@ fn gen_syscall_args_struct(
     let arg_type = &raw_arg.ty;
     raw_arg_types.push(arg_type.clone());
     let literal_i = syn::LitInt::new(&i.to_string(), arg_type.span());
-    inspect_raw_args.push(quote! {
+    inspect_raw_args.push(quote_spanned! { span =>
       let #arg_name = syscall_arg!(regs, #literal_i) as #arg_type;
     });
   }
   let mut modified_arg_names = vec![];
+  let mut modified_arg_names_err = vec![];
   let mut modified_arg_types = vec![];
   let mut inspect_modified_args = vec![];
   let syscall_result_type = &syscall.result;
   modified_arg_names.push(format_ident!("syscall_result"));
-  modified_arg_types.push(quote! { #syscall_result_type });
-  inspect_modified_args.push(if syscall_result_type != "Unit" {
-    quote! {
-      let syscall_result = syscall_res_from_regs!(regs) as #syscall_result_type;
-    }
+  modified_arg_types.push(quote_spanned! { span => #syscall_result_type });
+  let (inspect_syscall_result, is_syscall_failed) = if syscall_result_type != "Unit" {
+    (
+      quote_spanned! {
+        span =>
+        let syscall_result = syscall_res_from_regs!(regs) as #syscall_result_type;
+      },
+      quote_spanned! { span => (syscall_result as isize) < 0 },
+    )
   } else {
-    quote! {let syscall_result = ();}
-  });
+    (
+      quote_spanned! { span => let syscall_result = (); },
+      quote_spanned! { span => false },
+    )
+  };
   if let Some(modified_args) = &syscall.modified_args {
     for modified_arg in modified_args.args.iter() {
       let arg_name = &modified_arg.ident;
       modified_arg_names.push(arg_name.clone());
+      modified_arg_names_err.push(quote_spanned! { span =>
+        #arg_name: Err(InspectError::SyscallFailure)
+      });
       let arg_type = &modified_arg.ty;
       let (wrapped_arg_type, need_memory_inspection) =
         wrap_syscall_arg_type(arg_type, crate_token.clone());
       modified_arg_types.push(wrapped_arg_type.clone());
       if !need_memory_inspection {
-        let inspect = quote! {
+        let inspect = quote_spanned! { span =>
           let #arg_name = raw_args.#arg_name as #wrapped_arg_type;
         };
         inspect_modified_args.push(inspect);
       } else {
-        let inspect = quote! {
+        let inspect = quote_spanned! { span =>
           let #arg_name = #crate_token::InspectFromPid::inspect_from(inspectee_pid, raw_args.#arg_name as #crate_token::AddressType);
         };
         inspect_modified_args.push(inspect);
@@ -270,7 +307,7 @@ fn gen_syscall_args_struct(
   let syscall_const_name = format_ident!("SYS_{}", name);
   GenSyscallArgsStructResult {
     syscall_number: syscall_const_name.clone(),
-    raw_args_struct: quote! {
+    raw_args_struct: quote_spanned! { span =>
       #[cfg(any(#(target_arch = #arch_names),*))]
       pub const #syscall_const_name: isize = #syscall_number;
 
@@ -323,14 +360,22 @@ fn gen_syscall_args_struct(
         }
         fn inspect_sysexit(self, inspectee_pid: Pid, regs: &PtraceRegisters) -> Self::Result {
           let raw_args = self;
-          #(#inspect_modified_args)*
-          Self::Result {
-            #(#modified_arg_names),*
+          #inspect_syscall_result
+          if #is_syscall_failed {
+            Self::Result {
+              syscall_result,
+              #(#modified_arg_names_err),*
+            }
+          } else {
+            #(#inspect_modified_args)*
+            Self::Result {
+              #(#modified_arg_names),*
+            }
           }
         }
       }
     },
-    args_struct: quote::quote! {
+    args_struct: quote_spanned! { span =>
       #[cfg(any(#(target_arch = #arch_names),*))]
       #[derive(Debug, Clone, PartialEq)]
       pub struct #camel_case_args_type {
@@ -363,7 +408,7 @@ fn gen_syscall_args_struct(
         }
       }
     },
-    modified_args_struct: quote! {
+    modified_args_struct: quote_spanned! { span =>
       #[cfg(any(#(target_arch = #arch_names),*))]
       #[derive(Debug, Clone, PartialEq)]
       pub struct #camel_case_modified_args_type {
@@ -652,7 +697,7 @@ fn wrap_syscall_arg_type(
     Type::Array(ty) => {
       let element_ty = &ty.elem;
       (quote!(Result<#ty, InspectError<Vec<#element_ty>>>), true)
-    },
+    }
     Type::Path(ty) => {
       assert_eq!(ty.path.segments.len(), 1);
       let ty = &ty.path.segments[0];
