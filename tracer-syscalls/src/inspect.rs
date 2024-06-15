@@ -207,8 +207,10 @@ fn read_lossy_string(pid: Pid, address: AddressType) -> InspectResult<String> {
 fn read_null_ended_array<TItem: Clone + PartialEq>(
   pid: Pid,
   mut address: AddressType,
-  reader: impl Fn(Pid, AddressType) -> InspectResult<TItem>,
-) -> InspectResult<Vec<TItem>> {
+) -> InspectResult<Vec<TItem>>
+where
+  InspectResult<TItem>: InspectFromPid,
+{
   let mut res = Vec::new();
   const WORD_SIZE: usize = size_of::<c_long>();
   loop {
@@ -224,7 +226,7 @@ fn read_null_ended_array<TItem: Clone + PartialEq>(
     if ptr == 0 {
       return Ok(res);
     } else {
-      match reader(pid, ptr as AddressType) {
+      match InspectResult::<TItem>::inspect_from(pid, ptr as AddressType) {
         Ok(item) => res.push(item),
         Err(InspectError::PtraceFailure {
           errno,
@@ -242,24 +244,9 @@ fn read_null_ended_array<TItem: Clone + PartialEq>(
   }
 }
 
-#[allow(unused)]
-fn read_cstring_array(pid: Pid, address: AddressType) -> InspectResult<Vec<CString>> {
-  read_null_ended_array(pid, address, read_cstring)
-}
-
-fn read_lossy_string_array(pid: Pid, address: AddressType) -> InspectResult<Vec<String>> {
-  read_null_ended_array(pid, address, read_lossy_string)
-}
-
 impl InspectFromPid for InspectResult<PathBuf> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     read_pathbuf(pid, address)
-  }
-}
-
-impl InspectFromPid for InspectResult<Vec<u8>> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
   }
 }
 
@@ -276,7 +263,7 @@ impl InspectFromPid for InspectResult<Arc<statmount>> {
 }
 
 impl_inspect_for_sized! {
-  i32, u32, i64, u64, sockaddr, timex, cap_user_data, cap_user_header, timespec, stack_t, mnt_id_req,
+  u8, i32, u32, i64, u64, sockaddr, timex, cap_user_data, cap_user_header, timespec, stack_t, mnt_id_req,
   shmid_ds, cachestat, cachestat_range, statx, utimbuf, ustat, utsname, itimerspec, tms,
   sysinfo, clone_args, AddressType, sched_attr, sembuf, sched_param, sigaction, epoll_event, stat,
   statfs, futex_waitv, itimerval, iocb, __aio_sigset, io_uring_params, io_event, kexec_segment,
@@ -295,12 +282,14 @@ impl_inspect_for_sized! {
   crate::types::riscv_hwprobe
 }
 
+// TODO: speed up the read of Vec<u8>
+// FIXME: some Vec are not null-terminated
 impl<T: Clone + PartialEq> InspectFromPid for InspectResult<Vec<T>>
 where
   InspectResult<T>: InspectFromPid,
 {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
+    read_null_ended_array::<T>(pid, address)
   }
 }
 
