@@ -123,7 +123,7 @@ impl InspectFromPid for InspectResult<CString> {
   }
 }
 
-pub fn read_generic_string<TString: Clone + PartialEq>(
+fn read_generic_string<TString: Clone + PartialEq>(
   pid: Pid,
   address: AddressType,
   ctor: impl Fn(Vec<u8>) -> TString,
@@ -152,20 +152,20 @@ pub fn read_generic_string<TString: Clone + PartialEq>(
 }
 
 #[allow(unused)]
-pub fn read_cstring(pid: Pid, address: AddressType) -> InspectResult<CString> {
+fn read_cstring(pid: Pid, address: AddressType) -> InspectResult<CString> {
   read_generic_string(pid, address, |x| CString::new(x).unwrap())
 }
 
-pub fn read_pathbuf(pid: Pid, address: AddressType) -> InspectResult<PathBuf> {
+fn read_pathbuf(pid: Pid, address: AddressType) -> InspectResult<PathBuf> {
   read_generic_string(pid, address, |x| PathBuf::from(OsString::from_vec(x)))
 }
 
-pub fn read_lossy_string(pid: Pid, address: AddressType) -> InspectResult<String> {
+fn read_lossy_string(pid: Pid, address: AddressType) -> InspectResult<String> {
   // Waiting on https://github.com/rust-lang/libs-team/issues/116
   read_generic_string(pid, address, |x| String::from_utf8_lossy(&x).into_owned())
 }
 
-pub fn read_null_ended_array<TItem: Clone + PartialEq>(
+fn read_null_ended_array<TItem: Clone + PartialEq>(
   pid: Pid,
   mut address: AddressType,
   reader: impl Fn(Pid, AddressType) -> InspectResult<TItem>,
@@ -204,17 +204,17 @@ pub fn read_null_ended_array<TItem: Clone + PartialEq>(
 }
 
 #[allow(unused)]
-pub fn read_cstring_array(pid: Pid, address: AddressType) -> InspectResult<Vec<CString>> {
+fn read_cstring_array(pid: Pid, address: AddressType) -> InspectResult<Vec<CString>> {
   read_null_ended_array(pid, address, read_cstring)
 }
 
-pub fn read_lossy_string_array(pid: Pid, address: AddressType) -> InspectResult<Vec<String>> {
+fn read_lossy_string_array(pid: Pid, address: AddressType) -> InspectResult<Vec<String>> {
   read_null_ended_array(pid, address, read_lossy_string)
 }
 
 impl InspectFromPid for InspectResult<PathBuf> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
+    read_pathbuf(pid, address)
   }
 }
 
