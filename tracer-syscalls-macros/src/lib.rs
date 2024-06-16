@@ -314,7 +314,7 @@ fn gen_syscall_args_struct(
       #[cfg(any(#(target_arch = #arch_names),*))]
       #[derive(Debug, Clone, Copy, PartialEq)]
       pub struct #camel_case_raw_args_type {
-        #(#raw_arg_names: #raw_arg_types),*
+        #(pub #raw_arg_names: #raw_arg_types),*
       }
 
       #[cfg(any(#(target_arch = #arch_names),*))]
@@ -379,7 +379,7 @@ fn gen_syscall_args_struct(
       #[cfg(any(#(target_arch = #arch_names),*))]
       #[derive(Debug, Clone, PartialEq)]
       pub struct #camel_case_args_type {
-        #(#arg_names: #wrapped_arg_types),*
+        #(pub #arg_names: #wrapped_arg_types),*
       }
 
       #[cfg(any(#(target_arch = #arch_names),*))]
@@ -412,7 +412,7 @@ fn gen_syscall_args_struct(
       #[cfg(any(#(target_arch = #arch_names),*))]
       #[derive(Debug, Clone, PartialEq)]
       pub struct #camel_case_modified_args_type {
-        #(#modified_arg_names: #modified_arg_types),*
+        #(pub #modified_arg_names: #modified_arg_types),*
       }
 
       #[cfg(any(#(target_arch = #arch_names),*))]
