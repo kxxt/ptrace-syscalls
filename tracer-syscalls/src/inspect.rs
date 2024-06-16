@@ -91,6 +91,16 @@ pub(crate) trait InspectFromPid {
   fn inspect_from(pid: Pid, address: AddressType) -> Self;
 }
 
+/// Use ptrace to inspect the process with the given pid and return the inspection result.
+pub(crate) trait InspectCountedFromPid {
+  fn inspect_from(pid: Pid, address: AddressType, count: usize) -> Self;
+}
+
+/// Use ptrace to inspect the process with the given pid and return the inspection result.
+pub(crate) trait InspectDynSizedFromPid {
+  fn inspect_from(pid: Pid, address: AddressType, size: usize) -> Self;
+}
+
 const WORD_SIZE: usize = size_of::<c_long>();
 
 #[repr(transparent)]
@@ -290,6 +300,31 @@ where
 {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     read_null_ended_array::<T>(pid, address)
+  }
+}
+
+impl<T: Clone + PartialEq> InspectCountedFromPid for InspectResult<Vec<T>>
+where
+  InspectResult<T>: InspectFromPid,
+{
+  fn inspect_from(pid: Pid, address: AddressType, count: usize) -> Self {
+    let mut res = Vec::with_capacity(count);
+    for i in 0..count {
+      let item_address = unsafe { address.byte_add(i * size_of::<T>()) };
+      let item = match InspectResult::<T>::inspect_from(pid, item_address) {
+        Ok(item) => item,
+        Err(InspectError::SyscallFailure) => return Err(InspectError::SyscallFailure),
+        Err(InspectError::PtraceFailure { errno, incomplete }) => {
+          res.extend(incomplete);
+          return Err(InspectError::PtraceFailure {
+            errno,
+            incomplete: Some(res),
+          });
+        }
+      };
+      res.push(item);
+    }
+    Ok(res)
   }
 }
 
