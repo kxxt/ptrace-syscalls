@@ -768,7 +768,9 @@ fn wrap_syscall_arg_type(
               | "sigset_t" | "iovec" | "rlimit64" | "fd_set" | "sockaddr" | "sigaction"
               | "timeval" | "itimerval" | "stack_t" | "timer_t" | "time_t" | "sigevent"
               | "itimerspec" | "utimbuf" | "rusage" => (quote!(InspectResult<#ty>), true),
-              "[timespec; 2]" | "[timeval; 2]" => {
+              "[timespec; 2]" | "[timeval; 2]"
+               | "[timespec ; 2]" | "[timeval ; 2]"
+                => {
                 let GenericArgument::Type(inner) = arg.args.first().unwrap() else {
                   panic!("Unsupported inner syscall arg type: {:?}", argstr);
                 };
