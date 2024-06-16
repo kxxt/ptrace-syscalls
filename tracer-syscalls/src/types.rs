@@ -177,8 +177,8 @@ pub struct landlock_ruleset_attr {
 #[derive(Debug, Clone, PartialEq)]
 #[repr(C)]
 pub struct __mount_arg {
-  mnt_id: u64,
-  request_mask: u64,
+  pub mnt_id: u64,
+  pub request_mask: u64,
 }
 
 // Can't make a sane struct with DST array member in rust
@@ -195,10 +195,10 @@ pub struct __mount_arg {
 #[derive(Debug, Clone, PartialEq)]
 #[repr(C)]
 pub struct mount_attr {
-  attr_set: u64,
-  attr_clr: u64,
-  propagation: u64,
-  userns_fd: u64,
+  pub attr_set: u64,
+  pub attr_clr: u64,
+  pub propagation: u64,
+  pub userns_fd: u64,
 }
 
 pub type qid_t = c_uint;
@@ -207,80 +207,80 @@ pub type qid_t = c_uint;
 #[derive(Debug, Clone, PartialEq)]
 #[repr(C)]
 pub struct riscv_hwprobe {
-  key: i64,
-  value: u64,
+  pub key: i64,
+  pub value: u64,
 }
 
 #[derive(Debug, PartialEq)]
 #[repr(C, align(32))]
 // aligned(4 * sizeof(__u64))
 pub struct rseq {
-  cpu_id_start: u32,
-  cpu_id: u32,
-  rseq_cs: u64,
-  flags: u32,
-  node_id: u32,
-  mm_cid: u32,
-  end: [c_char],
+  pub cpu_id_start: u32,
+  pub cpu_id: u32,
+  pub rseq_cs: u64,
+  pub flags: u32,
+  pub node_id: u32,
+  pub mm_cid: u32,
+  pub end: [c_char],
 }
 
 #[derive(Debug, Clone, PartialEq)]
 #[repr(C)]
 pub struct mnt_id_req {
-  size: u32,
-  spare: u32,
-  mnt_id: u64,
-  param: u64,
+  pub size: u32,
+  pub spare: u32,
+  pub mnt_id: u64,
+  pub param: u64,
 }
 
 #[derive(Debug, PartialEq)]
 #[repr(C)]
 pub struct statmount {
-    size: u32,
-    __spare1: u32,
-    mask: u64,
-    sb_dev_major: u32,
-    sb_dev_minor: u32,
-    sb_magic: u64,
-    sb_flags: u32,
-    fs_type: u32,
-    mnt_id: u64,
-    mnt_parent_id: u64,
-    mnt_id_old: u64,
-    mnt_parent_id_old: u64,
-    mnt_attr: u64,
-    mnt_propagation: u64,
-    mnt_peer_group: u64,
-    mnt_master: u64,
-    propagate_from: u64,
-    mnt_root: u32,
-    mnt_point: u32,
-    __spare2: [u64;50],
-    str: [c_char]
+  pub size: u32,
+  pub __spare1: u32,
+  pub mask: u64,
+  pub sb_dev_major: u32,
+  pub sb_dev_minor: u32,
+  pub sb_magic: u64,
+  pub sb_flags: u32,
+  pub fs_type: u32,
+  pub mnt_id: u64,
+  pub mnt_parent_id: u64,
+  pub mnt_id_old: u64,
+  pub mnt_parent_id_old: u64,
+  pub mnt_attr: u64,
+  pub mnt_propagation: u64,
+  pub mnt_peer_group: u64,
+  pub mnt_master: u64,
+  pub propagate_from: u64,
+  pub mnt_root: u32,
+  pub mnt_point: u32,
+  pub __spare2: [u64;50],
+  pub str: [c_char]
 }
 
 #[derive(Debug, Clone, PartialEq)]
 #[repr(C)]
 pub struct ustat {
-  f_tfree: c_int,
-  f_tinode: ino64_t,
-  f_fname: [c_char; 6],
-  f_fpack: [c_char; 6],
+  pub f_tfree: c_int,
+  pub f_tinode: ino64_t,
+  pub f_fname: [c_char; 6],
+  pub f_fpack: [c_char; 6],
 }
 
 #[derive(Debug, Clone, PartialEq)]
 #[repr(C)]
 pub struct cachestat_range {
-  off: u64,
-  len: u64,
+  pub off: u64,
+  pub len: u64,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 #[repr(C)]
 pub struct cachestat {
-  nr_cache: u64,
-  nr_dirty: u64,
-  nr_writeback: u64,
-  nr_evicted: u64,
-  nr_recently_evicted: u64,
+  pub nr_cache: u64,
+  pub nr_dirty: u64,
+  pub nr_writeback: u64,
+  pub nr_evicted: u64,
+  pub nr_recently_evicted: u64,
 }
