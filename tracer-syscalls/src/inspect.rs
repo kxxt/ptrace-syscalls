@@ -74,9 +74,29 @@ pub enum InspectError<T: Clone + PartialEq> {
   SyscallFailure,
   /// Ptrace failed when trying to inspect the tracee memory.
   PtraceFailure { errno: Errno, incomplete: Option<T> },
+  /// A dependency inspection of this inspection failed.
+  DependencyInspectFailure { field: &'static str },
 }
 
 pub type InspectResult<T> = Result<T, InspectError<T>>;
+
+impl<T: Clone + PartialEq> InspectError<T> {
+  pub fn map_ptrace_failure<U: Clone + PartialEq, F: FnOnce(T) -> U>(
+    self,
+    f: F,
+  ) -> InspectError<U> {
+    match self {
+      InspectError::SyscallFailure => InspectError::SyscallFailure,
+      InspectError::PtraceFailure { errno, incomplete } => InspectError::PtraceFailure {
+        errno,
+        incomplete: incomplete.map(f),
+      },
+      InspectError::DependencyInspectFailure { field } => {
+        InspectError::DependencyInspectFailure { field }
+      }
+    }
+  }
+}
 
 /// Inspect the arguments and results on sysenter/sysexit stops based on register values captured on sysenter.
 pub trait SyscallStopInspect: Copy {
@@ -84,6 +104,47 @@ pub trait SyscallStopInspect: Copy {
   type Result;
   fn inspect_sysenter(self, inspectee_pid: Pid) -> Self::Args;
   fn inspect_sysexit(self, inspectee_pid: Pid, regs: &PtraceRegisters) -> Self::Result;
+}
+
+/// Marker trait for sized repr(C) structs
+pub(crate) unsafe trait ReprCMarker {}
+// /// Marker trait for inspecting nullable pointers
+// pub(crate) unsafe trait OptionMarker {}
+/// Special marker trait that serves as a hack :(
+pub(crate) unsafe trait SpecialMarker {}
+
+macro_rules! impl_marker {
+  ($marker:ty => $($ty:ty),*) => {
+    $(unsafe impl $marker for $ty {})*
+  };
+}
+
+impl_marker! {
+  ReprCMarker =>
+  u8, i32, u32, i64, u64, sockaddr, timex, cap_user_data, cap_user_header, timespec, stack_t, mnt_id_req,
+  shmid_ds, cachestat, cachestat_range, statx, utimbuf, ustat, utsname, itimerspec, tms,
+  sysinfo, clone_args, AddressType, sched_attr, sembuf, sched_param, sigaction, epoll_event, stat,
+  statfs, futex_waitv, itimerval, iocb, __aio_sigset, io_uring_params, io_event, kexec_segment,
+  rlimit, rusage, timezone, linux_dirent, linux_dirent64, landlock_ruleset_attr, __mount_arg,
+  timeval, mount_attr, mq_attr, iovec, rlimit64, siginfo_t, pollfd, fd_set, open_how, msqid_ds,
+  sigevent, mmsghdr, msghdr, sigset_t
+}
+
+// impl_marker! {
+//   OptionMarker =>
+//   // primitives
+//   i64, u64, i32, u32,
+//   // Special
+//   CString, PathBuf, Vec<CString>,
+//   // repr(C) structs
+//   rusage, statfs, statx, timespec, timeval, timex, tms, utimbuf, utsname, itimerspec, sysinfo,
+//   sigevent, stack_t, itimerval, sigaction, fd_set, rlimit64, sockaddr, epoll_event, sigset_t,
+//   siginfo_t, mq_attr, timezone
+// }
+
+impl_marker! {
+  SpecialMarker =>
+  CString, PathBuf, Vec<CString>
 }
 
 /// Use ptrace to inspect the process with the given pid and return the inspection result.
@@ -103,11 +164,7 @@ pub(crate) trait InspectDynSizedFromPid {
 
 const WORD_SIZE: usize = size_of::<c_long>();
 
-#[repr(transparent)]
-#[derive(Debug, Clone, PartialEq)]
-struct SizedWrapper<T>(T);
-
-impl<T: Clone + PartialEq> InspectFromPid for InspectResult<SizedWrapper<T>> {
+impl<T: Clone + PartialEq + ReprCMarker> InspectFromPid for InspectResult<T> {
   fn inspect_from(pid: Pid, mut address: AddressType) -> Self {
     let mut buf = MaybeUninit::<T>::uninit();
     let mut ptr = buf.as_mut_ptr() as *mut c_long;
@@ -140,30 +197,8 @@ impl<T: Clone + PartialEq> InspectFromPid for InspectResult<SizedWrapper<T>> {
         }
       }
     }
-    unsafe { Ok(SizedWrapper(buf.assume_init())) }
+    unsafe { Ok(buf.assume_init()) }
   }
-}
-
-macro_rules! impl_inspect_for_sized {
-  ($($ty:ty),*) => {
-    $(
-      impl InspectFromPid for InspectResult<$ty> {
-        fn inspect_from(pid: Pid, address: AddressType) -> Self {
-          InspectResult::<SizedWrapper<$ty>>::inspect_from(pid, address)
-            .map(|x|x.0)
-            .map_err(
-              |e| match e {
-                InspectError::SyscallFailure => InspectError::SyscallFailure,
-                InspectError::PtraceFailure { errno, incomplete } => InspectError::PtraceFailure {
-                  errno,
-                  incomplete: incomplete.map(|x|x.0),
-                },
-              }
-            )
-        }
-      }
-    )*
-  };
 }
 
 impl InspectFromPid for InspectResult<CString> {
@@ -238,16 +273,7 @@ where
     } else {
       match InspectResult::<TItem>::inspect_from(pid, ptr as AddressType) {
         Ok(item) => res.push(item),
-        Err(InspectError::PtraceFailure {
-          errno,
-          incomplete: _,
-        }) => {
-          return Err(InspectError::PtraceFailure {
-            errno,
-            incomplete: Some(res),
-          })
-        }
-        Err(InspectError::SyscallFailure) => return Err(InspectError::SyscallFailure),
+        Err(e) => return Err(e.map_ptrace_failure(|_| res)),
       };
     }
     address = unsafe { address.add(WORD_SIZE) };
@@ -260,8 +286,8 @@ impl InspectFromPid for InspectResult<PathBuf> {
   }
 }
 
-impl InspectFromPid for InspectResult<Arc<rseq>> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+impl InspectDynSizedFromPid for InspectResult<Arc<rseq>> {
+  fn inspect_from(pid: Pid, address: AddressType, size: usize) -> Self {
     todo!()
   }
 }
@@ -272,34 +298,27 @@ impl InspectFromPid for InspectResult<Arc<statmount>> {
   }
 }
 
-impl_inspect_for_sized! {
-  u8, i32, u32, i64, u64, sockaddr, timex, cap_user_data, cap_user_header, timespec, stack_t, mnt_id_req,
-  shmid_ds, cachestat, cachestat_range, statx, utimbuf, ustat, utsname, itimerspec, tms,
-  sysinfo, clone_args, AddressType, sched_attr, sembuf, sched_param, sigaction, epoll_event, stat,
-  statfs, futex_waitv, itimerval, iocb, __aio_sigset, io_uring_params, io_event, kexec_segment,
-  rlimit, rusage, timezone, linux_dirent, linux_dirent64, landlock_ruleset_attr, __mount_arg,
-  timeval, mount_attr, mq_attr, iovec, rlimit64, siginfo_t, pollfd, fd_set, open_how, msqid_ds,
-  sigevent, mmsghdr, msghdr, sigset_t
-}
-
 #[cfg(target_arch = "x86_64")]
-impl_inspect_for_sized! {
-  crate::types::user_desc
+impl_marker! {
+  ReprCMarker => crate::types::user_desc
 }
 
 #[cfg(target_arch = "riscv64")]
-impl_inspect_for_sized! {
-  crate::types::riscv_hwprobe
+impl_marker! {
+  ReprCMarker => crate::types::riscv_hwprobe
 }
 
 // TODO: speed up the read of Vec<u8>
 // FIXME: some Vec are not null-terminated
-impl<T: Clone + PartialEq> InspectFromPid for InspectResult<Vec<T>>
-where
-  InspectResult<T>: InspectFromPid,
-{
+impl InspectFromPid for InspectResult<Vec<u8>> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    read_null_ended_array::<T>(pid, address)
+    read_null_ended_array::<u8>(pid, address)
+  }
+}
+
+impl InspectFromPid for InspectResult<Vec<CString>> {
+  fn inspect_from(pid: Pid, address: AddressType) -> Self {
+    read_null_ended_array::<CString>(pid, address)
   }
 }
 
@@ -313,13 +332,11 @@ where
       let item_address = unsafe { address.byte_add(i * size_of::<T>()) };
       let item = match InspectResult::<T>::inspect_from(pid, item_address) {
         Ok(item) => item,
-        Err(InspectError::SyscallFailure) => return Err(InspectError::SyscallFailure),
-        Err(InspectError::PtraceFailure { errno, incomplete }) => {
-          res.extend(incomplete);
-          return Err(InspectError::PtraceFailure {
-            errno,
-            incomplete: Some(res),
-          });
+        Err(e) => {
+          return Err(e.map_ptrace_failure(|incomplete| {
+            res.push(incomplete);
+            res
+          }));
         }
       };
       res.push(item);
@@ -333,53 +350,71 @@ where
   InspectResult<T>: InspectFromPid,
 {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    let item1 = InspectResult::<T>::inspect_from(pid, address).map_err(|e| match e {
-      InspectError::SyscallFailure => InspectError::SyscallFailure,
-      InspectError::PtraceFailure { errno, incomplete } => InspectError::PtraceFailure {
-        errno,
-        incomplete: Some(incomplete.into_iter().collect::<Vec<T>>()),
-      },
-    })?;
+    let item1 = InspectResult::<T>::inspect_from(pid, address)
+      .map_err(|e| e.map_ptrace_failure(|incomplete| vec![incomplete]))?;
     let item2 = match InspectResult::<T>::inspect_from(pid, unsafe { address.add(size_of::<T>()) })
     {
       Ok(t) => t,
-      Err(e) => match e {
-        InspectError::SyscallFailure => return Err(InspectError::SyscallFailure),
-        InspectError::PtraceFailure { errno, incomplete } => {
-          return Err(InspectError::PtraceFailure {
-            errno,
-            incomplete: Some(
-              chain!(Some(item1), incomplete)
-                .into_iter()
-                .collect::<Vec<T>>(),
-            ),
-          })
-        }
-      },
+      Err(e) => return Err(e.map_ptrace_failure(|incomplete| vec![item1, incomplete])),
     };
     Ok([item1, item2])
   }
 }
 
-impl<T: Clone + PartialEq> InspectFromPid for InspectResult<Option<T>>
-where
-  InspectResult<T>: InspectFromPid,
-{
+impl<T: Clone + PartialEq + ReprCMarker> InspectFromPid for InspectResult<Option<T>> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     if address.is_null() {
       Ok(None)
     } else {
       Ok(Some(
-        InspectResult::<T>::inspect_from(pid, address).map_err(|e| match e {
-          InspectError::SyscallFailure => InspectError::SyscallFailure,
-          InspectError::PtraceFailure { errno, incomplete } => InspectError::PtraceFailure {
-            errno,
-            incomplete: Some(incomplete),
-          },
-        })?,
+        InspectResult::<T>::inspect_from(pid, address).map_err(|e| e.map_ptrace_failure(Some))?,
       ))
     }
   }
+}
+
+macro_rules! impl_inspect_from_pid_for_option {
+  ($($ty:ty),*) => {
+    $(
+      impl InspectFromPid for InspectResult<Option<$ty>> {
+        fn inspect_from(pid: Pid, address: AddressType) -> Self {
+          if address.is_null() {
+            Ok(None)
+          } else {
+            Ok(Some(
+              <InspectResult::<$ty> as InspectFromPid>::inspect_from(pid, address).map_err(|e| e.map_ptrace_failure(Some))?,
+            ))
+          }
+        }
+      }
+    )*
+  };
+}
+
+macro_rules! impl_inspect_counted_from_pid_for_option {
+  ($($ty:ty),*) => {
+    $(
+      impl InspectCountedFromPid for InspectResult<Option<$ty>> {
+        fn inspect_from(pid: Pid, address: AddressType, count: usize) -> Self {
+          if address.is_null() {
+            Ok(None)
+          } else {
+            Ok(Some(
+              <InspectResult::<$ty> as InspectCountedFromPid>::inspect_from(pid, address, count).map_err(|e| e.map_ptrace_failure(Some))?,
+            ))
+          }
+        }
+      }
+    )*
+  };
+}
+
+impl_inspect_from_pid_for_option! {
+  PathBuf, CString, Vec<CString>
+}
+
+impl_inspect_counted_from_pid_for_option! {
+  Vec<u64>, Vec<u32>
 }
 
 impl<T: Clone + PartialEq> InspectFromPid for Result<Option<[T; 2]>, InspectError<Vec<T>>>
@@ -391,14 +426,8 @@ where
       Ok(None)
     } else {
       Ok(Some(
-        Result::<[T; 2], InspectError<Vec<T>>>::inspect_from(pid, address).map_err(
-          |e| match e {
-            InspectError::SyscallFailure => InspectError::SyscallFailure,
-            InspectError::PtraceFailure { errno, incomplete } => {
-              InspectError::PtraceFailure { errno, incomplete }
-            }
-          },
-        )?,
+        Result::<[T; 2], InspectError<Vec<T>>>::inspect_from(pid, address)
+          .map_err(|e| e.map_ptrace_failure(|incomplete| incomplete))?,
       ))
     }
   }

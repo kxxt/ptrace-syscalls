@@ -34,6 +34,37 @@ struct Decoder {
   args: Punctuated<Expr, Token![,]>,
 }
 
+impl Decoder {
+  fn decoded(&self, arg_name: &Ident, arg_type: proc_macro2::TokenStream, span: Span) -> proc_macro2::TokenStream {
+    let mut counter = 0u32;
+    let func: &Ident = &self.func;
+    let (target_trait, is_result) = match func.to_string().as_str() {
+      "sized_by" => (format_ident!("InspectDynSizedFromPid"), false),
+      "counted_by" => (format_ident!("InspectCountedFromPid"), false),
+      "counted_by_result" => (format_ident!("InspectCountedFromPid"), true),
+      _ => panic!("Unsupported decoder function: {:?}", func),
+    };
+    let args = &self.args;
+    if !is_result {
+      quote_spanned! {
+        span =>
+        let #arg_name = <#arg_type as #target_trait>::inspect_from(inspectee_pid, raw_args.#arg_name as AddressType, (#args) as usize);
+      }
+    } else {
+      counter += 1;
+      let tmp_name = format_ident!("tmp_{}", counter);
+      quote_spanned! {
+        span => 
+        let #arg_name = if let Some(&#tmp_name) = (#args).as_ref().ok() {
+          <#arg_type as #target_trait>::inspect_from(inspectee_pid, raw_args.#arg_name as AddressType, #tmp_name as usize)
+        } else {
+          Err(InspectError::DependencyInspectFailure { field: stringify!(#arg_name) })
+        };
+      }
+    }
+  }
+}
+
 impl Parse for Decoder {
   fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
     let content;
@@ -232,7 +263,7 @@ fn gen_syscall_args_struct(
     arg_names.push(arg_name.clone());
     let arg_type = &arg.ty;
     let (wrapped_arg_type, need_memory_inspection) =
-      wrap_syscall_arg_type(arg_type, crate_token.clone());
+      wrap_syscall_arg_type(arg_type, crate_token.clone(), span);
     wrapped_arg_types.push(wrapped_arg_type.clone());
     if !need_memory_inspection {
       let inspect = quote_spanned! { span =>
@@ -240,10 +271,14 @@ fn gen_syscall_args_struct(
       };
       inspects.push(inspect);
     } else {
-      let inspect = quote_spanned! { span =>
-        let #arg_name = #crate_token::InspectFromPid::inspect_from(inspectee_pid, raw_args.#arg_name as #crate_token::AddressType);
-      };
-      inspects.push(inspect);
+      if let Some(decoder) = &arg.decoder {
+        let decoded = decoder.decoded(arg_name, wrapped_arg_type, span);
+        inspects.push(decoded);
+      } else {
+        inspects.push(quote_spanned! { span =>
+          let #arg_name: #wrapped_arg_type = #crate_token::InspectFromPid::inspect_from(inspectee_pid, raw_args.#arg_name as #crate_token::AddressType);
+        });
+      }
     }
   }
   let mut raw_arg_names = vec![];
@@ -289,7 +324,7 @@ fn gen_syscall_args_struct(
       });
       let arg_type = &modified_arg.ty;
       let (wrapped_arg_type, need_memory_inspection) =
-        wrap_syscall_arg_type(arg_type, crate_token.clone());
+        wrap_syscall_arg_type(arg_type, crate_token.clone(), span);
       modified_arg_types.push(wrapped_arg_type.clone());
       if !need_memory_inspection {
         let inspect = quote_spanned! { span =>
@@ -297,10 +332,14 @@ fn gen_syscall_args_struct(
         };
         inspect_modified_args.push(inspect);
       } else {
-        let inspect = quote_spanned! { span =>
-          let #arg_name = #crate_token::InspectFromPid::inspect_from(inspectee_pid, raw_args.#arg_name as #crate_token::AddressType);
-        };
-        inspect_modified_args.push(inspect);
+        if let Some(decoder) = &modified_arg.decoder {
+          let decoded = decoder.decoded(arg_name, wrapped_arg_type, span);
+          inspect_modified_args.push(decoded);
+        } else {
+          inspect_modified_args.push(quote_spanned! { span =>
+            let #arg_name: #wrapped_arg_type = #crate_token::InspectFromPid::inspect_from(inspectee_pid, raw_args.#arg_name as #crate_token::AddressType);
+          });
+        }
       }
     }
   }
@@ -692,18 +731,22 @@ fn get_crate(name: &str) -> proc_macro2::TokenStream {
 fn wrap_syscall_arg_type(
   ty: &Type,
   crate_token: proc_macro2::TokenStream,
+  span: Span,
 ) -> (proc_macro2::TokenStream, bool) {
   match ty {
     Type::Array(ty) => {
       let element_ty = &ty.elem;
-      (quote!(Result<#ty, InspectError<Vec<#element_ty>>>), true)
+      (
+        quote_spanned!(span =>Result<#ty, InspectError<Vec<#element_ty>>>),
+        true,
+      )
     }
     Type::Path(ty) => {
       assert_eq!(ty.path.segments.len(), 1);
       let ty = &ty.path.segments[0];
       let ty_str = ty.to_token_stream().to_string();
       match ty_str.as_str() {
-        "Unit" => (quote!(()), false),
+        "Unit" => (quote_spanned!(span => ()), false),
         "RawFd" | "socklen_t" | "c_int" | "c_uint" | "c_ulong" | "c_long" | "i16" | "i32"
         | "i64" | "u64" | "usize" | "isize" | "size_t" | "key_serial_t" | "AddressType"
         | "mode_t" | "uid_t" | "pid_t" | "gid_t" | "off_t" | "u32" | "clockid_t" | "id_t"
@@ -755,7 +798,7 @@ fn wrap_syscall_arg_type(
         | "ustat"
         | "shmid_ds"
         | "cachestat"
-        | "cachestat_range" => (quote!(InspectResult<#ty>), true),
+        | "cachestat_range" => (quote_spanned!(span => InspectResult<#ty>), true),
         _ => {
           if ty.ident == "Option" {
             let PathArguments::AngleBracketed(arg) = &ty.arguments else {
@@ -767,10 +810,10 @@ fn wrap_syscall_arg_type(
               | "Vec < c_uint >" | "Vec < gid_t >" | "timezone" | "mq_attr" | "siginfo_t"
               | "sigset_t" | "iovec" | "rlimit64" | "fd_set" | "sockaddr" | "sigaction"
               | "timeval" | "itimerval" | "stack_t" | "timer_t" | "time_t" | "sigevent"
-              | "itimerspec" | "utimbuf" | "rusage" => (quote!(InspectResult<#ty>), true),
-              "[timespec; 2]" | "[timeval; 2]"
-               | "[timespec ; 2]" | "[timeval ; 2]"
-                => {
+              | "itimerspec" | "utimbuf" | "rusage" => {
+                (quote_spanned!(span => InspectResult<#ty>), true)
+              }
+              "[timespec; 2]" | "[timeval; 2]" | "[timespec ; 2]" | "[timeval ; 2]" => {
                 let GenericArgument::Type(inner) = arg.args.first().unwrap() else {
                   panic!("Unsupported inner syscall arg type: {:?}", argstr);
                 };
@@ -778,7 +821,10 @@ fn wrap_syscall_arg_type(
                   panic!("Unsupported inner syscall arg type: {:?}", argstr)
                 };
                 let element_ty = &inner.elem;
-                (quote!(Result<#ty, InspectError<Vec<#element_ty>>>), true)
+                (
+                  quote_spanned!(span => Result<#ty, InspectError<Vec<#element_ty>>>),
+                  true,
+                )
               }
               _ => panic!("Unsupported inner syscall arg type: {:?}", argstr),
             }
@@ -791,18 +837,20 @@ fn wrap_syscall_arg_type(
               "c_int" | "u8" | "CString" | "epoll_event" | "futex_waitv" | "c_ulong"
               | "linux_dirent" | "io_event" | "linux_dirent64" | "gid_t" | "AddressType"
               | "kexec_segment" | "c_uchar" | "u64" | "mount_attr" | "pollfd" | "iovec"
-              | "riscv_hwprobe" | "mmsghdr" | "sembuf" => (quote!(InspectResult<#ty>), true),
+              | "riscv_hwprobe" | "mmsghdr" | "sembuf" => {
+                (quote_spanned!(span => InspectResult<#ty>), true)
+              }
               _ => panic!("Unsupported inner syscall arg type: {:?}", arg),
             }
           } else if ty.ident == "InspectResult" {
-            (quote!(#ty), true)
+            (quote_spanned!(span => #ty), true)
           } else if ty.ident == "Arc" {
             let PathArguments::AngleBracketed(arg) = &ty.arguments else {
               panic!("Unsupported inner syscall arg type: {:?}", ty_str);
             };
             let arg = arg.args.to_token_stream().to_string();
             match arg.as_str() {
-              "rseq" | "statmount" => (quote!(InspectResult<#ty>), true),
+              "rseq" | "statmount" => (quote_spanned!(span => InspectResult<#ty>), true),
               _ => panic!("Unsupported inner syscall arg type: {:?}", arg),
             }
           } else {

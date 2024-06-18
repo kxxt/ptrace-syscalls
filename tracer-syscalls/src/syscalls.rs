@@ -10,7 +10,8 @@ use std::{
 use crate::{
   arch::{syscall_arg, syscall_no_from_regs, syscall_res_from_regs, PtraceRegisters},
   types::*,
-  InspectError, InspectResult, SyscallNumber, SyscallStopInspect,
+  InspectCountedFromPid, InspectDynSizedFromPid, InspectError, InspectFromPid, InspectResult,
+  SyscallNumber, SyscallStopInspect,
 };
 use crate::{ptrace_getregs, SyscallGroups, SyscallGroupsGetter};
 use enumflags2::BitFlags;
@@ -25,6 +26,7 @@ use nix::libc::{
 };
 use nix::sys::ptrace::AddressType;
 use nix::unistd::Pid;
+use std::mem::size_of;
 use std::sync::Arc;
 use tracer_syscalls_macros::gen_syscalls;
 
@@ -75,7 +77,7 @@ gen_syscalls! {
   access(pathname: *const c_char, mode: c_int) / { pathname: PathBuf, mode: c_int } -> c_int ~ [File] for [x86_64: 21],
   acct(filename: *const c_char) / { filename: Option<PathBuf> } -> c_int ~ [File] for [x86_64: 163, aarch64: 89, riscv64: 89],
   add_key(r#type: *const c_char, description: *const c_char, payload: *const c_void, plen: size_t, keyring: key_serial_t ) /
-    { r#type: CString, description: CString, payload: Vec<u8>, plen: size_t, keyring: key_serial_t }
+    { r#type: CString, description: CString, payload: Vec<u8> @ counted_by(raw_args.plen), keyring: key_serial_t }
     -> key_serial_t ~ [] for [x86_64: 248, aarch64: 217, riscv64: 217],
   adjtimex(buf: *mut timex) / { buf: timex } -> c_int ~ [Clock] for [x86_64: 159, aarch64: 171, riscv64: 171],
   alarm(seconds: c_uint) / { seconds: c_uint } -> c_uint ~ [] for [x86_64: 37],
@@ -86,7 +88,7 @@ gen_syscalls! {
     { socketfd: RawFd, addr: sockaddr, addrlen: socklen_t } -> c_int ~ [Network] for [x86_64: 49, aarch64: 200, riscv64: 200],
   // TODO: https://elixir.bootlin.com/linux/latest/source/include/uapi/linux/bpf.h#L1454 and https://www.man7.org/linux/man-pages/man2/bpf.2.html
   bpf(cmd: c_int, attr: *mut c_void, size: c_uint) /
-    { cmd: c_int, attr: Vec<u8>, size: c_uint } -> c_int ~ [Desc] for [x86_64: 321, aarch64: 280, riscv64: 280],
+    { cmd: c_int, attr: Vec<u8> @ counted_by(raw_args.size) } -> c_int ~ [Desc] for [x86_64: 321, aarch64: 280, riscv64: 280],
   brk(addr: *mut c_void) / { addr: AddressType } -> c_int ~ [Memory] for [x86_64: 12, aarch64: 214, riscv64: 214],
   // cachectl, cacheflush
   // cachestat: TODO: https://github.com/golang/go/issues/61917
@@ -150,13 +152,13 @@ gen_syscalls! {
   //   { epfd: RawFd, op: c_int, fd: RawFd, event: epoll_event } -> c_int for [x86_64: 214],
   epoll_pwait(epfd: RawFd, events: *mut epoll_event, maxevents: c_int, timeout: c_int, sigmask: *const sigset_t) /
     { epfd: RawFd, maxevents: c_int, timeout: c_int, sigmask: sigset_t }
-    -> c_int + { events: Vec<epoll_event> } ~ [Desc] for [x86_64: 281, aarch64: 22, riscv64: 22],
+    -> c_int + { events: Vec<epoll_event> @ counted_by(syscall_result) } ~ [Desc] for [x86_64: 281, aarch64: 22, riscv64: 22],
   epoll_pwait2(epfd: RawFd, events: *mut epoll_event, maxevents: c_int, timeout: *const timespec, sigmask: *const sigset_t) /
     { epfd: RawFd, maxevents: c_int, timeout: Option<timespec>, sigmask: sigset_t }
-    -> c_int + { events: Vec<epoll_event> } ~ [Desc] for [x86_64: 441, aarch64: 441, riscv64: 441],
+    -> c_int + { events: Vec<epoll_event> @ counted_by(syscall_result) } ~ [Desc] for [x86_64: 441, aarch64: 441, riscv64: 441],
   epoll_wait(epfd: RawFd, events: *mut epoll_event, maxevents: c_int, timeout: c_int) /
     { epfd: RawFd, maxevents: c_int, timeout: c_int }
-    -> c_int + { events: Vec<epoll_event> } ~ [Desc] for [x86_64: 232],
+    -> c_int + { events: Vec<epoll_event> @ counted_by(syscall_result) } ~ [Desc] for [x86_64: 232],
   // TODO: epoll_wait_old
   // epoll_wait_old(epfd: RawFd, events: *mut epoll_event, maxevents: c_int, timeout: c_int) /
   //   { epfd: RawFd, maxevents: c_int, timeout: c_int }
@@ -233,15 +235,15 @@ gen_syscalls! {
   // https://elixir.bootlin.com/linux/v6.9.3/source/include/linux/syscalls.h#L568
   // futex_requeue: waiters is always a two-element array of futex_waitv. TODO: design a better rust interface
   futex_requeue(waiters: *mut futex_waitv, flags: c_uint, nr_wake: c_int, nr_requeue: c_int) /
-    { waiters: Vec<futex_waitv>, flags: c_uint, nr_wake: c_int, nr_requeue: c_int }
-    -> c_long + { waiters: Vec<futex_waitv> } ~ [] for [x86_64: 456, aarch64: 456, riscv64: 456],
+    { waiters: [futex_waitv; 2], flags: c_uint, nr_wake: c_int, nr_requeue: c_int }
+    -> c_long + { waiters: [futex_waitv; 2] } ~ [] for [x86_64: 456, aarch64: 456, riscv64: 456],
   // futex_time64
   futex_wait(uaddr: *mut u32, val: c_ulong, mask: c_ulong, flags: c_uint, timespec: *mut timespec, clockid: clockid_t) /
     { uaddr: InspectResult<u32>, val: c_ulong, mask: c_ulong, flags: c_uint, timespec: timespec, clockid: clockid_t }
     -> c_long + { uaddr: InspectResult<u32> } ~ [] for [x86_64: 455, aarch64: 455, riscv64: 455],
   futex_waitv(waiters: *mut futex_waitv, nr_futexes: c_uint, flags: c_uint, timeout: *mut timespec, clockid: clockid_t) /
-    { waiters: Vec<futex_waitv>, nr_futexes: c_uint, flags: c_uint, timeout: timespec, clockid: clockid_t }
-    -> c_long + { waiters: Vec<futex_waitv> } ~ [] for [x86_64: 449, aarch64: 449, riscv64: 449],
+    { waiters: Vec<futex_waitv> @ counted_by(raw_args.nr_futexes), flags: c_uint, timeout: timespec, clockid: clockid_t }
+    -> c_long + { waiters: Vec<futex_waitv> @ counted_by(raw_args.nr_futexes) } ~ [] for [x86_64: 449, aarch64: 449, riscv64: 449],
   futex_wake(uaddr: *mut u32, mask: c_ulong, nr: c_int, flags: c_uint) /
     { uaddr: InspectResult<u32>, mask: c_ulong, nr: c_int, flags: c_uint }
     -> c_long + { uaddr: InspectResult<u32> } ~ [] for [x86_64: 454, aarch64: 454, riscv64: 454],
@@ -249,16 +251,22 @@ gen_syscalls! {
     { dirfd: RawFd, pathname: PathBuf, times: [timeval;2] } -> c_int ~ [Desc, File] for [x86_64: 261],
   // get_mempolicy: nodemask: [c_ulong; (maxnode + ULONG_WIDTH - 1) / ULONG_WIDTH]
   get_mempolicy(mode: *mut c_int, nodemask: *mut c_ulong, maxnode: c_ulong, addr: AddressType, flags: c_ulong) /
-    { maxnode: c_ulong, addr: AddressType, flags: c_ulong } -> c_long +
-    { mode: InspectResult<Option<c_int>>, nodemask: Option<Vec<c_ulong>> } ~ [Memory] for [x86_64: 239, aarch64: 236, riscv64: 236],
+    { maxnode: c_ulong, addr: AddressType, flags: c_ulong }
+    -> c_long + { mode: InspectResult<Option<c_int>>,
+      nodemask: Option<Vec<c_ulong>> @ counted_by(raw_args.maxnode as usize + (8 * std::mem::size_of::<c_ulong>() - 1) / std::mem::size_of::<c_ulong>()) }
+    ~ [Memory] for [x86_64: 239, aarch64: 236, riscv64: 236],
   get_robust_list(pid: pid_t, head_ptr: *mut *mut robust_list_head, len_ptr: *mut size_t) /
     { pid: pid_t, head_ptr: InspectResult<AddressType>, len_ptr: size_t } -> c_long ~ [] for [x86_64: 274, aarch64: 100, riscv64: 100],
   get_thread_area(u_info: *mut user_desc) / { u_info: user_desc } -> c_int + { u_info: user_desc } ~ [] for [x86_64: 211],
   getcpu(cpu: *mut c_uint, node: *mut c_uint) /
     { cpu: InspectResult<Option<c_uint>>, node: InspectResult<Option<c_uint>> } -> c_int ~ [] for [x86_64: 309, aarch64: 168, riscv64: 168],
   getcwd(buf: *mut c_char, size: size_t) / { size: size_t } -> c_long + { buf: CString } ~ [File] for [x86_64: 79, aarch64: 17, riscv64: 17],
-  getdents(fd: RawFd, dirp: *mut linux_dirent, count: c_uint) / { fd: RawFd, count: c_uint } -> c_int + { dirp: Vec<linux_dirent> } ~ [Desc] for [x86_64: 78],
-  getdents64(fd: RawFd, dirp: *mut linux_dirent64, count: c_uint) / { fd: RawFd, count: c_uint } -> c_int + { dirp: Vec<linux_dirent64> }
+  // getdents: count is size of buffer! This syscall returns the number of bytes read.
+  getdents(fd: RawFd, dirp: *mut linux_dirent, count: c_uint) / { fd: RawFd, count: c_uint }
+    -> c_int + { dirp: Vec<linux_dirent> @ counted_by((syscall_result as usize) / size_of::<linux_dirent>()) }
+    ~ [Desc] for [x86_64: 78],
+  getdents64(fd: RawFd, dirp: *mut linux_dirent64, count: c_uint) / { fd: RawFd, count: c_uint }
+    -> c_int + { dirp: Vec<linux_dirent64> @ counted_by((syscall_result as usize) / size_of::<linux_dirent>()) }
     ~ [Desc] for [x86_64: 217, aarch64: 61, riscv64: 61],
   // getdomainname
   // getdtablesize
@@ -268,7 +276,9 @@ gen_syscalls! {
   // geteuid32
   getgid() / {} -> gid_t ~ [Creds, Pure] for [x86_64: 104, aarch64: 176, riscv64: 176],
   // getgid32
-  getgroups(size: c_int, list: *mut gid_t) / { size: c_int } -> c_int + { list: Vec<gid_t> } ~ [Creds] for [x86_64: 115, aarch64: 158, riscv64: 158],
+  getgroups(gidsetsize: c_int, grouplist: *mut gid_t) / { } -> c_int
+    + { grouplist: Vec<gid_t> @ counted_by(if raw_args.gidsetsize == 0 { 0 } else { syscall_result }) }
+    ~ [Creds] for [x86_64: 115, aarch64: 158, riscv64: 158],
   // getgroups32
   // gethostname
   getitimer(which: c_int, value: *mut itimerval) / { which: c_int } -> c_int + { value: itimerval } ~ [] for [x86_64: 36, aarch64: 102, riscv64: 102],
@@ -281,7 +291,7 @@ gen_syscalls! {
   getpid() / {} -> pid_t ~ [Pure] for [x86_64: 39, aarch64: 172, riscv64: 172],
   getppid() / {} -> pid_t ~ [Pure] for [x86_64: 110, aarch64: 173, riscv64: 173],
   getpriority(which: c_int, who: id_t) / { which: c_int, who: id_t } -> c_int ~ [] for [x86_64: 140, aarch64: 141, riscv64: 141],
-  getrandom(buf: *mut c_void, buflen: size_t, flags: c_uint) / { buflen: size_t, flags: c_uint } -> ssize_t + { buf: Vec<u8> }
+  getrandom(buf: *mut c_void, buflen: size_t, flags: c_uint) / { buflen: size_t, flags: c_uint } -> ssize_t + { buf: Vec<u8> @ counted_by(raw_args.buflen) }
     ~ [] for [x86_64: 318, aarch64: 278, riscv64: 278],
   getresgid(rgid: *mut gid_t, egid: *mut gid_t, sgid: *mut gid_t) / {}
     -> c_int + { rgid: InspectResult<gid_t>, egid: InspectResult<gid_t>, sgid: InspectResult<gid_t> }
@@ -299,19 +309,19 @@ gen_syscalls! {
     ~ [Network] for [x86_64: 51, aarch64: 204, riscv64: 204],
   getsockopt(sockfd: RawFd, level: c_int, optname: c_int, optval: *mut c_void, optlen: *mut socklen_t) /
     { sockfd: RawFd, level: c_int, optname: c_int, optlen: InspectResult<socklen_t> }
-    -> c_int + { optval: Vec<u8>, optlen: InspectResult<socklen_t> }
+    -> c_int + { optlen: InspectResult<socklen_t>, optval: Vec<u8> @ counted_by_result(optlen) }
     ~ [Network] for [x86_64: 55, aarch64: 209, riscv64: 209],
   gettid() / {} -> pid_t ~ [Pure] for [x86_64: 186, aarch64: 178, riscv64: 178],
   gettimeofday(tv: *mut timeval, tz: *mut timezone) / {} -> c_int + { tv: timeval, tz: Option<timezone> } ~ [Clock] for [x86_64: 96, aarch64: 169, riscv64: 169],
   getuid() / {} -> uid_t ~ [Creds, Pure] for [x86_64: 102, aarch64: 174, riscv64: 174],
   // getuid32
   getxattr(pathname: *const c_char, name: *const c_char, value: *mut c_void, size: size_t) /
-    { pathname: PathBuf, name: CString, size: size_t } -> ssize_t + { value: Vec<u8> } ~ [File] for [x86_64: 191, aarch64: 8, riscv64: 8],
+    { pathname: PathBuf, name: CString, size: size_t } -> ssize_t + { value: Vec<u8> @ counted_by(syscall_result) } ~ [File] for [x86_64: 191, aarch64: 8, riscv64: 8],
   // getxgid
   // getxpid
   // getxuid
   init_module(module_image: *mut c_void, len: c_ulong, param_values: *const c_char) /
-    { module_image: Vec<u8>, len: c_ulong, param_values: CString } -> c_int ~ [] for [x86_64: 175, aarch64: 105, riscv64: 105],
+    { module_image: Vec<u8> @ counted_by(raw_args.len), param_values: CString } -> c_int ~ [] for [x86_64: 175, aarch64: 105, riscv64: 105],
   inotify_add_watch(fd: RawFd, pathname: *const c_char, mask: u32) /
     { fd: RawFd, pathname: PathBuf, mask: u32 } -> c_int ~ [Desc, File] for [x86_64: 254, aarch64: 27, riscv64: 27],
   inotify_init() / {} -> RawFd ~ [Desc] for [x86_64: 253],
@@ -324,19 +334,19 @@ gen_syscalls! {
 
   io_getevents(ctx_id: aio_context_t, min_nr: c_long, nr: c_long, events: *mut io_event, timeout: *mut timespec) /
     { ctx_id: aio_context_t, min_nr: c_long, nr: c_long, timeout: Option<timespec> }
-    -> c_int + { events: Vec<io_event> } ~ [] for [x86_64: 208, aarch64: 4, riscv64: 4],
+    -> c_int + { events: Vec<io_event> @ counted_by(syscall_result) } ~ [] for [x86_64: 208, aarch64: 4, riscv64: 4],
   io_pgetevents(ctx_id: aio_context_t, min_nr: c_long, nr: c_long, events: *mut io_event, timeout: *mut timespec, sig: *const __aio_sigset) /
     { ctx_id: aio_context_t, min_nr: c_long, nr: c_long, timeout: Option<timespec>, sig: __aio_sigset }
-    -> c_int + { events: Vec<io_event> } ~ [] for [x86_64: 333, aarch64: 292, riscv64: 292],
+    -> c_int + { events: Vec<io_event> @ counted_by(syscall_result) } ~ [] for [x86_64: 333, aarch64: 292, riscv64: 292],
   // io_pgetevents_time64
   io_setup(nr_events: c_ulong, ctx_idp: *mut aio_context_t) / { nr_events: c_ulong }
     -> c_int + { ctx_idp: InspectResult<aio_context_t> } ~ [Memory] for [x86_64: 206, aarch64: 0, riscv64: 0],
   // io_submit: iocbpp is an array of iocb pointers. TODO: how to handle it?
-  io_submit(ctx_id: aio_context_t, nr: c_long, iocbpp: *mut *mut iocb) /
-    { ctx_id: aio_context_t, nr: c_long, iocbpp: Vec<AddressType> } -> c_int ~ [] for [x86_64: 209, aarch64: 2, riscv64: 2],
+  io_submit(ctx: aio_context_t, nr: c_long, iocbs: *mut *mut iocb) /
+    { ctx: aio_context_t, iocbs: Vec<AddressType> @ counted_by(raw_args.nr) } -> c_int ~ [] for [x86_64: 209, aarch64: 2, riscv64: 2],
   // io_uring_enter: arg can be a sigset_t ptr or io_uring_getevents_arg ptr depending on the flags
   io_uring_enter(fd: c_uint, to_submit: c_uint, min_complete: c_uint, flags: c_uint, arg: AddressType, argsz: size_t) /
-    { fd: c_uint, to_submit: c_uint, min_complete: c_uint, flags: c_uint, arg: Vec<u8>, argsz: size_t }
+    { fd: c_uint, to_submit: c_uint, min_complete: c_uint, flags: c_uint, arg: Vec<u8> @ counted_by(raw_args.argsz) }
     -> c_int ~ [Desc, File] for [x86_64: 426, aarch64: 426, riscv64: 426],
   // arg can point to a lot of different struct (array) depending on the op
   io_uring_register(fd: c_uint, op: c_uint, arg: AddressType, nr_args: c_uint) /
@@ -357,7 +367,7 @@ gen_syscalls! {
     { kernel_fd: RawFd, initrd_fd: RawFd, cmdline_len: c_ulong, cmdline: CString, flags: c_ulong } -> c_long
     ~ [Desc] for [x86_64: 320, aarch64: 294, riscv64: 294],
   kexec_load(entry: c_ulong, nr_segments: c_ulong, segments: *mut kexec_segment, flags: c_ulong) /
-    { entry: c_ulong, nr_segments: c_ulong, segments: Vec<kexec_segment>, flags: c_ulong } -> c_long
+    { entry: c_ulong, segments: Vec<kexec_segment> @ counted_by(raw_args.nr_segments), flags: c_ulong } -> c_long
     ~ [] for [x86_64: 246, aarch64: 104, riscv64: 104],
   keyctl(option: c_int, arg2: c_ulong, arg3: c_ulong, arg4: c_ulong, arg5: c_ulong) /
     { option: c_int, arg2: c_ulong, arg3: c_ulong, arg4: c_ulong, arg5: c_ulong } -> c_long ~ [] for [x86_64: 250, aarch64: 219, riscv64: 219],
@@ -371,7 +381,7 @@ gen_syscalls! {
   lchown(pathname: *const c_char, owner: uid_t, group: gid_t) / { pathname: PathBuf, owner: uid_t, group: gid_t } -> c_int ~ [File] for [x86_64: 94],
   // lchown32
   lgetxattr(pathname: *const c_char, name: *const c_char, value: *mut c_void, size: size_t) /
-  { pathname: PathBuf, name: CString, size: size_t } -> ssize_t + { value: Vec<u8> } ~ [File] for [x86_64: 192, aarch64: 9, riscv64: 9],
+  { pathname: PathBuf, name: CString, size: size_t } -> ssize_t + { value: Vec<u8> @ counted_by(syscall_result) } ~ [File] for [x86_64: 192, aarch64: 9, riscv64: 9],
   link(oldpath: *const c_char, newpath: *const c_char) / { oldpath: PathBuf, newpath: PathBuf } -> c_int ~ [File] for [x86_64: 86],
   linkat(olddirfd: RawFd, oldpath: *const c_char, newdirfd: RawFd, newpath: *const c_char, flags: c_int) /
     { olddirfd: RawFd, oldpath: PathBuf, newdirfd: RawFd, newpath: PathBuf, flags: c_int } -> c_int
@@ -379,7 +389,8 @@ gen_syscalls! {
   listen(sockfd: RawFd, backlog: c_int) / { sockfd: RawFd, backlog: c_int } -> c_int ~ [Network] for [x86_64: 50, aarch64: 201, riscv64: 201],
   // listmount: https://lwn.net/Articles/950569/
   listmount(req: *const __mount_arg, buf: *mut u64, bufsize: size_t, flags: c_uint) /
-    { req: __mount_arg, bufsize: size_t, flags: c_uint } -> c_int + { buf: Vec<u64> } ~ [] for [x86_64: 458, aarch64: 458, riscv64: 458],
+    { req: __mount_arg, bufsize: size_t, flags: c_uint } -> c_int + { buf: Vec<u64> @ counted_by(raw_args.bufsize) }
+     ~ [] for [x86_64: 458, aarch64: 458, riscv64: 458],
   listxattr(path: *const c_char, list: *mut c_char, size: size_t) /
     { path: PathBuf, size: size_t } -> ssize_t + { list: Option<Vec<CString>> } ~ [File] for [x86_64: 194, aarch64: 11, riscv64: 11],
   llistxattr(path: *const c_char, list: *mut c_char, size: size_t) /
@@ -395,9 +406,9 @@ gen_syscalls! {
   lsm_get_self_attr(attr: c_uint, ctx: *mut c_void, size: *mut u32, flags: u32) / { attr: c_uint, size: InspectResult<u32>, flags: u32 }
     -> c_int + { ctx: Vec<u8> } ~ [] for [x86_64: 459, aarch64: 459, riscv64: 459],
   lsm_list_modules(ids: *mut u64, size: *mut u32, flags: u32) / { size: InspectResult<u32>, flags: u32 }
-    -> c_int + { ids: Vec<u64> } ~ [] for [x86_64: 461, aarch64: 461, riscv64: 461],
+    -> c_int + { size: InspectResult<u32>, ids: Vec<u64> @ counted_by_result(size) } ~ [] for [x86_64: 461, aarch64: 461, riscv64: 461],
   lsm_set_self_attr(attr: c_uint, ctx: *const c_void, size: u32, flags: u32) /
-    { attr: c_uint, ctx: Vec<u8>, size: u32, flags: u32 } -> c_int ~ [] for [x86_64: 460, aarch64: 460, riscv64: 460],
+    { attr: c_uint, ctx: Vec<u8> @ counted_by(raw_args.size), flags: u32 } -> c_int ~ [] for [x86_64: 460, aarch64: 460, riscv64: 460],
   lstat(pathname: *const c_char, statbuf: *mut stat) / { pathname: PathBuf } -> c_int + { statbuf: stat } ~ [File, LStat, StatLike] for [x86_64: 6],
   // lstat64
   madvise(addr: *mut c_void, length: size_t, advice: c_int) / { addr: AddressType, length: size_t, advice: c_int } -> c_int
@@ -405,7 +416,9 @@ gen_syscalls! {
   map_shadow_stack(addr: *mut c_void, len: c_ulong, flags: c_int) / { addr: AddressType, len: c_ulong, flags: c_int } -> c_int
     ~ [Memory] for [x86_64: 453, aarch64: 453, riscv64: 453],
   mbind(addr: *mut c_void, len: c_ulong, mode: c_int, nodemask: *const c_ulong, maxnode: c_ulong, flags: c_uint) /
-    { len: c_ulong, mode: c_int, nodemask: Vec<c_ulong>, maxnode: c_ulong, flags: c_uint } -> c_long
+    { len: c_ulong, mode: c_int,
+       nodemask: Vec<c_ulong> @ counted_by(raw_args.maxnode as usize + (8 * std::mem::size_of::<c_ulong>() - 1) / std::mem::size_of::<c_ulong>()),
+       maxnode: c_ulong, flags: c_uint } -> c_long
     ~ [Memory] for [x86_64: 237, aarch64: 235, riscv64: 235],
   membarrier(cmd: c_int, flags: c_uint, cpu_id: c_int) / { cmd: c_int, flags: c_int, cpu_id: c_int } -> c_int
     ~ [Memory] for [x86_64: 324, aarch64: 283, riscv64: 283],
@@ -415,8 +428,8 @@ gen_syscalls! {
   // memory_ordering
   // migrate_pages: TODO: what's the size of the Vec
   migrate_pages(pid: pid_t, maxnode: c_ulong, old_nodes: *const c_ulong, new_nodes: *const c_ulong) /
-    { pid: pid_t, maxnode: c_ulong, old_nodes: Vec<c_ulong>, new_nodes: Vec<c_ulong> } -> c_long
-    ~ [Memory] for [x86_64: 256, aarch64: 238, riscv64: 238],
+    { pid: pid_t, maxnode: c_ulong, old_nodes: Vec<c_ulong> @ counted_by(todo!()), new_nodes: Vec<c_ulong> @ counted_by(todo!()) }
+    -> c_long ~ [Memory] for [x86_64: 256, aarch64: 238, riscv64: 238],
   // mincore: vec is at least of len (length+PAGE_SIZE-1) / PAGE_SIZE, where PAGE_SIZE is sysconf(_SC_PAGESIZE)
   mincore(addr: *mut c_void, length: size_t, vec: *mut c_uchar) / { addr: AddressType, length: size_t } -> c_int + { vec: Vec<c_uchar> }
     ~ [Memory] for [x86_64: 27, aarch64: 232, riscv64: 232],
@@ -441,14 +454,17 @@ gen_syscalls! {
     ~ [File] for [x86_64: 165, aarch64: 40, riscv64: 40],
   // mount_setattr: TODO: the mount_attr struct is extensible
   mount_setattr(dirfd: RawFd, pathname: *const c_char, flags: c_uint, attr: *mut mount_attr, size: size_t) /
-    { dirfd: RawFd, pathname: PathBuf, flags: c_uint, attr: Vec<mount_attr>, size: size_t } -> c_int
+    { dirfd: RawFd, pathname: PathBuf, flags: c_uint, attr: Vec<mount_attr> @ counted_by(raw_args.size) } -> c_int
     ~ [Desc, File] for [x86_64: 442, aarch64: 442, riscv64: 442],
   move_mount(from_dfd: RawFd, from_path: *const c_char, to_dfd: RawFd, to_path: *const c_char, ms_flags: c_uint) /
     { from_dfd: RawFd, from_path: PathBuf, to_dfd: RawFd, to_path: PathBuf, ms_flags: c_uint } -> c_int
     ~ [Desc, File] for [x86_64: 429, aarch64: 429, riscv64: 429],
   // move_pages: pages, nodes and status are arrays of size count
   move_pages(pid: pid_t, count: c_ulong, pages: *mut *mut c_void, nodes: *const c_int, status: *mut c_int, flags: c_int) /
-    { pid: pid_t, count: c_ulong, pages: Vec<AddressType>, nodes: Vec<c_int>, flags: c_int } -> c_long + { status: Vec<c_int> }
+    { pid: pid_t,
+      pages: Vec<AddressType> @ counted_by(raw_args.count),
+      nodes: Vec<c_int> @ counted_by(raw_args.count),
+      flags: c_int } -> c_long + { status: Vec<c_int> @ counted_by(raw_args.count) }
     ~ [Memory] for [x86_64: 279, aarch64: 239, riscv64: 239],
   mprotect(addr: *mut c_void, len: size_t, prot: c_int) / { addr: AddressType, len: size_t, prot: c_int } -> c_int
     ~ [Memory] for [x86_64: 10, aarch64: 226, riscv64: 226],
@@ -460,7 +476,8 @@ gen_syscalls! {
     { name: CString, oflag: c_int, mode: mode_t, attr: Option<mq_attr> } -> mqd_t
     ~ [Desc] for [x86_64: 240, aarch64: 180, riscv64: 180],
   mq_timedreceive(mqdes: mqd_t, msg_ptr: *mut *mut c_char, msg_len: size_t, msg_prio: *mut c_uint, abs_timeout: *const timespec) /
-    { mqdes: mqd_t, msg_len: size_t, abs_timeout: timespec } -> ssize_t + { msg_ptr: Vec<CString>, msg_prio: Option<Vec<c_uint>> }
+    { mqdes: mqd_t, msg_len: size_t, abs_timeout: timespec } -> ssize_t
+    + { msg_ptr: Vec<CString> @ counted_by(raw_args.msg_len), msg_prio: Option<Vec<c_uint>> @ counted_by(raw_args.msg_len) }
     ~ [Desc] for [x86_64: 243, aarch64: 183, riscv64: 183],
   // mq_timedreceive_time64
   mq_timedsend(mqdes: mqd_t, msg_ptr: *const c_char, msg_len: size_t, msg_prio: c_uint, abs_timeout: *const timespec) /
@@ -479,10 +496,10 @@ gen_syscalls! {
   msgget(key: key_t, msgflg: c_int) / { key: key_t, msgflg: c_int } -> c_int ~ [] for [x86_64: 68, aarch64: 186, riscv64: 186],
   // TODO: msgp is a ptr to DST msgbuf { long mtype; char mtext[msgsz]; }
   msgrcv(msqid: c_int, msgp: *mut c_void, msgsz: size_t, msgtyp: c_long, msgflg: c_int) /
-    { msqid: c_int, msgsz: size_t, msgtyp: c_long, msgflg: c_int } -> ssize_t + { msgp: Vec<u8> }
+    { msqid: c_int, msgsz: size_t, msgtyp: c_long, msgflg: c_int } -> ssize_t + { msgp: Vec<u8> @ counted_by(syscall_result) }
     ~ [] for [x86_64: 70, aarch64: 188, riscv64: 188],
   msgsnd(msqid: c_int, msgp: *const c_void, msgsz: size_t, msgflg: c_int) /
-    { msqid: c_int, msgp: Vec<u8>, msgsz: size_t, msgflg: c_int } -> c_int ~ [] for [x86_64: 69, aarch64: 189, riscv64: 189],
+    { msqid: c_int, msgp: Vec<u8> @ counted_by(raw_args.msgsz), msgflg: c_int } -> c_int ~ [] for [x86_64: 69, aarch64: 189, riscv64: 189],
   msync(addr: *mut c_void, length: size_t, flags: c_int) / { addr: AddressType, length: size_t, flags: c_int } -> c_int
     ~ [Memory] for [x86_64: 26, aarch64: 227, riscv64: 227],
   // multiplexer
@@ -491,7 +508,7 @@ gen_syscalls! {
   munmap(addr: *mut c_void, length: size_t) / { addr: AddressType, length: size_t } -> c_int ~ [Memory] for [x86_64: 11, aarch64: 215, riscv64: 215],
   // TODO: DST file_handle
   name_to_handle_at(dirfd: RawFd, pathname: *const c_char, handle: *mut c_void, mount_id: *mut c_int, flags: c_int) /
-    { dirfd: RawFd, pathname: PathBuf, flags: c_int } -> c_int + { handle: Vec<u8>, mount_id: InspectResult<c_int> }
+    { dirfd: RawFd, pathname: PathBuf, flags: c_int } -> c_int + { handle: Vec<u8> @ counted_by(todo!()), mount_id: InspectResult<c_int> }
     ~ [Desc, File] for [x86_64: 303, aarch64: 264, riscv64: 264],
   nanosleep(req: *const timespec, rem: *mut timespec) / { req: timespec } -> c_int + { rem: Option<timespec> }
     ~ [Clock] for [x86_64: 35, aarch64: 230, riscv64: 230],
@@ -508,8 +525,9 @@ gen_syscalls! {
   // olduname
   open(pathname: *const c_char, flags: c_int, mode: mode_t) / { pathname: PathBuf, flags: c_int, mode: mode_t } -> RawFd
     ~ [Desc, File] for [x86_64: 2, aarch64: 56, riscv64: 56],
+  // open_by_handle_at: TODO: DST
   open_by_handle_at(mount_fd: RawFd, handle: *mut c_void, flags: c_int) /
-    { mount_fd: RawFd, handle: Vec<u8>, flags: c_int } -> RawFd ~ [Desc] for [x86_64: 304, aarch64: 265, riscv64: 265],
+    { mount_fd: RawFd, handle: Vec<u8> @ counted_by(todo!()), flags: c_int } -> RawFd ~ [Desc] for [x86_64: 304, aarch64: 265, riscv64: 265],
   open_tree(dirfd: RawFd, path: *const c_char, flags: c_uint) / { dirfd: RawFd, path: PathBuf, flags: c_uint } -> c_int
     ~ [Desc, File] for [x86_64: 428, aarch64: 428, riscv64: 428],
   openat(dirfd: RawFd, pathname: *const c_char, flags: c_int, mode: mode_t) /
@@ -542,35 +560,36 @@ gen_syscalls! {
   pkey_free(pkey: c_int) / { pkey: c_int } -> c_int ~ [] for [x86_64: 331, aarch64: 290, riscv64: 290],
   pkey_mprotect(addr: *mut c_void, len: size_t, prot: c_int, pkey: c_int) /
     { addr: AddressType, len: size_t, prot: c_int, pkey: c_int } -> c_int ~ [Memory] for [x86_64: 329, aarch64: 288, riscv64: 288],
-  poll(fds: *mut pollfd, nfds: nfds_t, timeout: c_int) / { nfds: nfds_t, timeout: c_int } -> c_int + { fds: Vec<pollfd> }
-    ~ [Desc] for [x86_64: 7],
+  poll(fds: *mut pollfd, nfds: nfds_t, timeout: c_int) / { fds: Vec<pollfd> @ counted_by(raw_args.nfds), timeout: c_int }
+    -> c_int + { fds: Vec<pollfd> @ counted_by(raw_args.nfds) } ~ [Desc] for [x86_64: 7],
   ppoll(fds: *mut pollfd, nfds: nfds_t, tmo_p: *const timespec, sigmask: *const sigset_t) /
-    { nfds: nfds_t, tmo_p: Option<timespec>, sigmask: Option<sigset_t> } -> c_int + { fds: Vec<pollfd> }
+    { fds: Vec<pollfd> @ counted_by(raw_args.nfds), tmo_p: Option<timespec>, sigmask: Option<sigset_t> }
+    -> c_int + { fds: Vec<pollfd> @ counted_by(raw_args.nfds) }
     ~ [Desc] for [x86_64: 271, aarch64: 73, riscv64: 73],
   // ppoll_time64
   prctl(option: c_int, arg2: c_ulong, arg3: c_ulong, arg4: c_ulong, arg5: c_ulong) /
     { option: c_int, arg2: c_ulong, arg3: c_ulong, arg4: c_ulong, arg5: c_ulong } -> c_int
     ~ [Clock] for [x86_64: 157, aarch64: 167, riscv64: 167],
   pread64(fd: RawFd, buf: *mut c_void, count: size_t, offset: loff_t) /
-    { fd: RawFd, count: size_t, offset: loff_t } -> ssize_t + { buf: Vec<u8> }
+    { fd: RawFd, count: size_t, offset: loff_t } -> ssize_t + { buf: Vec<u8> @ counted_by(syscall_result) }
     ~ [Desc] for [x86_64: 17, aarch64: 67, riscv64: 67],
   preadv(fd: RawFd, iov: *const iovec, iovcnt: c_int, offset: off_t) /
-    { fd: RawFd, iov: Vec<iovec>, offset: off_t } -> ssize_t ~ [Desc] for [x86_64: 295, aarch64: 69, riscv64: 69],
+    { fd: RawFd, iov: Vec<iovec> @ counted_by(raw_args.iovcnt), offset: off_t } -> ssize_t ~ [Desc] for [x86_64: 295, aarch64: 69, riscv64: 69],
   preadv2(fd: RawFd, iov: *const iovec, iovcnt: c_int, offset: off_t, flags: c_int) /
-    { fd: RawFd, iov: Vec<iovec>, offset: off_t, flags: c_int } -> ssize_t ~ [Desc] for [x86_64: 327, aarch64: 286, riscv64: 286],
+    { fd: RawFd, iov: Vec<iovec> @ counted_by(raw_args.iovcnt), offset: off_t, flags: c_int } -> ssize_t ~ [Desc] for [x86_64: 327, aarch64: 286, riscv64: 286],
   prlimit64(pid: pid_t, resource: c_int, new_limit: *const rlimit64, old_limit: *mut rlimit64) /
     { pid: pid_t, resource: c_int, new_limit: Option<rlimit64>, old_limit: Option<rlimit64> } -> c_int + { old_limit: Option<rlimit64> }
     ~ [] for [x86_64: 302, aarch64: 261, riscv64: 261],
   process_madvise(pidfd: RawFd, iovec: *const iovec, vlen: size_t, advice: c_int, flags: c_uint) /
-    { pidfd: RawFd, iovec: Vec<iovec>, vlen: size_t, advice: c_int, flags: c_uint } -> c_int
+    { pidfd: RawFd, iovec: Vec<iovec> @ counted_by(raw_args.vlen), advice: c_int, flags: c_uint } -> c_int
     ~ [Desc] for [x86_64: 440, aarch64: 440, riscv64: 440],
   process_mrelease(pidfd: RawFd, flags: c_uint) / { pidfd: RawFd, flags: c_uint } -> c_int ~ [Desc] for [x86_64: 448, aarch64: 448, riscv64: 448],
   process_vm_readv(pid: pid_t, local_iov: *const iovec, liovcnt: c_ulong, remote_iov: *const iovec, riovcnt: c_ulong, flags: c_ulong) /
-    { pid: pid_t, local_iov: Vec<iovec>, remote_iov: Vec<iovec>, flags: c_ulong } -> ssize_t
-    ~ [] for [x86_64: 310, aarch64: 270, riscv64: 270],
+    { pid: pid_t, local_iov: Vec<iovec> @ counted_by(raw_args.liovcnt), remote_iov: Vec<iovec> @ counted_by(raw_args.riovcnt), flags: c_ulong }
+    -> ssize_t ~ [] for [x86_64: 310, aarch64: 270, riscv64: 270],
   process_vm_writev(pid: pid_t, local_iov: *const iovec, liovcnt: c_ulong, remote_iov: *const iovec, riovcnt: c_ulong, flags: c_ulong) /
-    { pid: pid_t, local_iov: Vec<iovec>, remote_iov: Vec<iovec>, flags: c_ulong } -> ssize_t
-    ~ [] for [x86_64: 311, aarch64: 271, riscv64: 271],
+    { pid: pid_t, local_iov: Vec<iovec> @ counted_by(raw_args.liovcnt), remote_iov: Vec<iovec> @ counted_by(raw_args.riovcnt), flags: c_ulong }
+    -> ssize_t ~ [] for [x86_64: 311, aarch64: 271, riscv64: 271],
   // TODO: sigmask is { const kernel_sigset_t *ss;  size_t ss_len; /* Size (in bytes) of object pointed to by 'ss' */ }
   pselect6(nfds: c_int, readfds: *mut fd_set, writefds: *mut fd_set, exceptfds: *mut fd_set, timeout: *mut timespec, sigmask: *const c_void) /
     { readfds: Option<fd_set>, writefds: Option<fd_set>, exceptfds: Option<fd_set>, timeout: Option<timespec>, sigmask: Option<sigset_t> }
@@ -580,32 +599,32 @@ gen_syscalls! {
   ptrace(request: c_int, pid: pid_t, addr: *mut c_void, data: *mut c_void) / { } -> c_long
     ~ [] for [x86_64: 101, aarch64: 117, riscv64: 117],
   pwrite64(fd: RawFd, buf: *const c_void, count: size_t, offset: loff_t) /
-    { fd: RawFd, buf: Vec<u8> @ counted_by(count), count: size_t, offset: loff_t } -> ssize_t ~ [Desc] for [x86_64: 18, aarch64: 68, riscv64: 68],
+    { fd: RawFd, buf: Vec<u8> @ counted_by(raw_args.count), offset: loff_t } -> ssize_t ~ [Desc] for [x86_64: 18, aarch64: 68, riscv64: 68],
   pwritev(fd: RawFd, iov: *const iovec, iovcnt: c_int, offset: off_t) /
-    { fd: RawFd, iov: Vec<iovec> @ counted_by(iovcnt), offset: off_t } -> ssize_t ~ [Desc] for [x86_64: 296, aarch64: 70, riscv64: 70],
+    { fd: RawFd, iov: Vec<iovec> @ counted_by(raw_args.iovcnt), offset: off_t } -> ssize_t ~ [Desc] for [x86_64: 296, aarch64: 70, riscv64: 70],
   pwritev2(fd: RawFd, iov: *const iovec, iovcnt: c_int, offset: off_t, flags: c_int) /
-    { fd: RawFd, iov: Vec<iovec> @ counted_by(iovcnt), offset: off_t, flags: c_int } -> ssize_t ~ [Desc] for [x86_64: 328, aarch64: 287, riscv64: 287],
+    { fd: RawFd, iov: Vec<iovec> @ counted_by(raw_args.iovcnt), offset: off_t, flags: c_int } -> ssize_t ~ [Desc] for [x86_64: 328, aarch64: 287, riscv64: 287],
   quotactl(cmd: c_int, special: *const c_char, id: qid_t, addr: AddressType) /
     { cmd: c_int, special: Option<CString>, id: qid_t } -> c_int ~ [File] for [x86_64: 179, aarch64: 60, riscv64: 60],
   quotactl_fd(fd: RawFd, cmd: c_int, id: c_int, addr: AddressType) / { fd: RawFd, cmd: c_int, id: c_int } -> c_int
     ~ [Desc] for [x86_64: 443, aarch64: 443, riscv64: 443],
-  read(fd: RawFd, buf: *mut c_void, count: size_t) / { fd: RawFd, count: size_t } -> ssize_t + { buf: Vec<u8> @ on_success_counted_by(syscall_result) }
+  read(fd: RawFd, buf: *mut c_void, count: size_t) / { fd: RawFd, count: size_t } -> ssize_t + { buf: Vec<u8> @ counted_by(syscall_result) }
     ~ [Desc] for [x86_64: 0, aarch64: 63, riscv64: 63],
   readahead(fd: RawFd, offset: off_t, count: size_t) / { fd: RawFd, offset: off_t, count: size_t } -> ssize_t
     ~ [Desc] for [x86_64: 187, aarch64: 213, riscv64: 213],
   // readdir(fd: RawFd, dirp: AddressType, count: c_uint) / { fd: RawFd, count: c_uint } -> c_int + { dirp: Vec<u8> } ~ [Desc] for [],
   readlink(pathname: *const c_char, buf: *mut c_char, bufsiz: size_t) / { pathname: PathBuf, bufsiz: size_t } -> ssize_t
-    + { buf: Vec<u8> @ on_success_counted_by(syscall_result) } ~ [File] for [x86_64: 89],
+    + { buf: Vec<u8> @ counted_by(syscall_result) } ~ [File] for [x86_64: 89],
   readlinkat(dirfd: RawFd, pathname: *const c_char, buf: *mut c_char, bufsiz: size_t) /
-    { dirfd: RawFd, pathname: PathBuf, bufsiz: size_t } -> ssize_t + { buf: Vec<u8> @ on_success_counted_by(syscall_result) }
+    { dirfd: RawFd, pathname: PathBuf, bufsiz: size_t } -> ssize_t + { buf: Vec<u8> @ counted_by(syscall_result) }
     ~ [Desc, File] for [x86_64: 267, aarch64: 78, riscv64: 78],
-  readv(fd: RawFd, iov: *const iovec, iovcnt: c_int) / { fd: RawFd, iov: Vec<iovec> @ counted_by(iovcnt) } -> ssize_t
+  readv(fd: RawFd, iov: *const iovec, iovcnt: c_int) / { fd: RawFd, iov: Vec<iovec> @ counted_by(raw_args.iovcnt) } -> ssize_t
     ~ [Desc] for [x86_64: 19, aarch64: 65, riscv64: 65],
   reboot(magic: c_int, magic2: c_int, cmd: c_int, arg: *mut c_void) / { magic: c_int, magic2: c_int, cmd: c_int } -> c_int
     ~ [] for [x86_64: 169, aarch64: 142, riscv64: 142],
   //  recv
   recvfrom(sockfd: RawFd, buf: *mut c_void, len: size_t, flags: c_int, src_addr: *mut sockaddr, addrlen: *mut socklen_t) /
-    { sockfd: RawFd, len: size_t, flags: c_int, src_addr: Option<sockaddr> } -> ssize_t + { buf: Vec<u8> @ on_success_counted_by(syscall_result) }
+    { sockfd: RawFd, len: size_t, flags: c_int, src_addr: Option<sockaddr> } -> ssize_t + { buf: Vec<u8> @ counted_by(syscall_result) }
     ~ [Network] for [x86_64: 45, aarch64: 207, riscv64: 207],
   recvmmsg(sockfd: RawFd, msgvec: *mut mmsghdr, vlen: c_uint, flags: c_int, timeout: *mut timespec) /
     { sockfd: RawFd, vlen: c_uint, flags: c_int, msgvec: Vec<mmsghdr> @ counted_by(vlen), timeout: Option<timespec> } -> c_int
@@ -635,10 +654,10 @@ gen_syscalls! {
   // https://docs.kernel.org/6.5/riscv/hwprobe.html
   riscv_hwprobe(pairs: *mut riscv_hwprobe, pair_count: size_t, cpu_count: size_t, cpus: *mut c_ulong, flags: c_uint) /
     { pairs: Vec<riscv_hwprobe>, pair_count: size_t, cpu_count: size_t, cpus: Vec<c_ulong>, flags: c_uint }
-    -> c_int + { pairs: Vec<riscv_hwprobe> }
+    -> c_int + { pairs: Vec<riscv_hwprobe> @ counted_by(raw_args.pair_count) }
     ~ [] for [riscv64: 258],
   rmdir(pathname: *const c_char) / { pathname: PathBuf } -> c_int ~ [File] for [x86_64: 84],
-  rseq(rseq: *mut c_void, rseq_len: u32, flags: c_int, sig: u32) / { rseq: Arc<rseq>, rseq_len: u32, flags: c_int, sig: u32 } -> c_int
+  rseq(rseq: *mut c_void, rseq_len: u32, flags: c_int, sig: u32) / { rseq: Arc<rseq> @ sized_by(raw_args.rseq_len), flags: c_int, sig: u32 } -> c_int
     ~ [] for [x86_64: 334, aarch64: 293, riscv64: 293],
   rt_sigaction(sig: c_int, act: *const sigaction, oact: *mut sigaction, sigsetsize: size_t) /
     { sig: c_int, act: Option<sigaction>, oact: Option<sigaction>, sigsetsize: size_t } -> c_int + { oact: Option<sigaction> }
@@ -666,7 +685,7 @@ gen_syscalls! {
   sched_get_priority_min(policy: c_int) / { policy: c_int } -> c_int ~ [] for [x86_64: 147, aarch64: 126, riscv64: 126],
   // sched_getaffinity syscall returns (in bytes) the number of bytes placed copied into the mask buffer. arg cpusetsize is also in bytes
   sched_getaffinity(pid: pid_t, cpusetsize: size_t, mask: *mut c_ulong) /
-    { pid: pid_t, cpusetsize: size_t } -> c_int + { mask: Vec<u8> }
+    { pid: pid_t, cpusetsize: size_t } -> c_int + { mask: Vec<u8> @ counted_by(syscall_result) }
     ~ [] for [x86_64: 204, aarch64: 123, riscv64: 123],
   sched_getattr(pid: pid_t, attr: *mut sched_attr, size: c_uint, flags: c_uint) /
     { pid: pid_t, size: c_uint, flags: c_uint } -> c_int + { attr: sched_attr }
@@ -679,7 +698,7 @@ gen_syscalls! {
   // sched_rr_get_interval_time64
   // sched_set_affinity
   sched_setaffinity(pid: pid_t, cpusetsize: size_t, mask: *const c_ulong) /
-    { pid: pid_t, cpusetsize: size_t, mask: Vec<u8> } -> c_int
+    { pid: pid_t, cpusetsize: size_t, mask: Vec<u8> @ counted_by(cpusetsize) } -> c_int
     ~ [] for [x86_64: 203, aarch64: 122, riscv64: 122],
   // sched_setattr size is the first field of sched_attr struct
   sched_setattr(pid: pid_t, attr: *mut sched_attr, flags: c_uint) / { pid: pid_t, attr: sched_attr, flags: c_uint } -> c_int
@@ -702,7 +721,7 @@ gen_syscalls! {
     ~ [IPC] for [x86_64: 66, aarch64: 191, riscv64: 191],
   semget(key: key_t, nsems: c_int, semflg: c_int) / { key: key_t, nsems: c_int, semflg: c_int } -> c_int
     ~ [IPC] for [x86_64: 64, aarch64: 190, riscv64: 190],
-  semop(semid: c_int, sops: *mut sembuf, nsops: size_t) / { semid: c_int, nsops: c_uint, sops: Vec<sembuf> @ counted_by(nsops) } -> c_int
+  semop(semid: c_int, sops: *mut sembuf, nsops: size_t) / { sops: Vec<sembuf> @ counted_by(raw_args.nsops) } -> c_int
     ~ [IPC] for [x86_64: 65, aarch64: 193, riscv64: 193],
   semtimedop(semid: c_int, sops: *mut sembuf, nsops: size_t, timeout: *const timespec) /
     { semid: c_int, nsops: c_uint, sops: Vec<sembuf> @ counted_by(nsops), timeout: Option<timespec> } -> c_int
@@ -713,16 +732,16 @@ gen_syscalls! {
     { out_fd: RawFd, in_fd: RawFd, offset: off_t, count: size_t } -> ssize_t ~ [Desc, Network] for [x86_64: 40, aarch64: 71, riscv64: 71],
   // sendfile64
   sendmmsg(sockfd: RawFd, msgvec: *mut mmsghdr, vlen: c_uint, flags: c_int) /
-    { sockfd: RawFd, vlen: c_uint, flags: c_int, msgvec: Vec<mmsghdr> @ counted_by(vlen) } -> c_int
+    { sockfd: RawFd, vlen: c_uint, flags: c_int, msgvec: Vec<mmsghdr> @ counted_by(raw_args.vlen) } -> c_int
     ~ [Network] for [x86_64: 307, aarch64: 269, riscv64: 269],
   sendmsg(sockfd: RawFd, msg: *const msghdr, flags: c_int) / { sockfd: RawFd, flags: c_int, msg: msghdr } -> ssize_t
     ~ [Network] for [x86_64: 46, aarch64: 211, riscv64: 211],
   sendto(sockfd: RawFd, buf: *const c_void, len: size_t, flags: c_int, dest_addr: *const sockaddr, addrlen: socklen_t) /
-    { sockfd: RawFd, buf: Vec<u8> @ counted_by(len), flags: c_int, dest_addr: Option<sockaddr> } -> ssize_t
+    { sockfd: RawFd, buf: Vec<u8> @ counted_by(raw_args.len), flags: c_int, dest_addr: Option<sockaddr> } -> ssize_t
     ~ [Network] for [x86_64: 44, aarch64: 206, riscv64: 206],
   set_mempolicy(mode: c_int, nodemask: *const c_ulong, maxnode: c_ulong) /
     { mode: c_int,
-      nodemask: Vec<c_ulong> @ counted_by( maxnode + (8 * std::mem::size_of::<c_ulong>() - 1) / std::mem::size_of::<c_ulong>() ),
+      nodemask: Vec<c_ulong> @ counted_by( raw_args.maxnode as usize + (8 * std::mem::size_of::<c_ulong>() - 1) / std::mem::size_of::<c_ulong>() ),
       maxnode: c_ulong }
      -> c_int ~ [Memory] for [x86_64: 238, aarch64: 237, riscv64: 237],
   set_mempolicy_home_node(start: c_ulong, len: c_ulong, home_mode: c_ulong, flags: c_ulong) /
@@ -740,7 +759,7 @@ gen_syscalls! {
   // setfsuid32
   setgid(gid: gid_t) / { gid: gid_t } -> c_int ~ [Creds] for [x86_64: 106, aarch64: 144, riscv64: 144],
   // setgid32
-  setgroups(size: size_t, list: *const gid_t) / { list: Option<Vec<gid_t>> @ counted_by(size) } -> c_int
+  setgroups(size: size_t, list: *const gid_t) / { list: Option<Vec<gid_t>> @ counted_by(raw_args.size) } -> c_int
     ~ [Creds] for [x86_64: 116, aarch64: 159, riscv64: 159],
   // setgroups32
   // sethae
@@ -769,7 +788,7 @@ gen_syscalls! {
     ~ [] for [x86_64: 160, aarch64: 164, riscv64: 164],
   setsid() / {} -> pid_t ~ [] for [x86_64: 112, aarch64: 157, riscv64: 157],
   setsockopt(sockfd: RawFd, level: c_int, optname: c_int, optval: *const c_void, optlen: socklen_t) /
-    { sockfd: RawFd, level: c_int, optname: c_int, optval: Vec<u8> @ counted_by(optlen) } -> c_int
+    { sockfd: RawFd, level: c_int, optname: c_int, optval: Vec<u8> @ counted_by(raw_args.optlen) } -> c_int
     ~ [Network] for [x86_64: 54, aarch64: 208, riscv64: 208],
   settimeofday(tv: *const timeval, tz: *const timezone) / { tv: timeval, tz: Option<timezone> } -> c_int
     ~ [Clock] for [x86_64: 164, aarch64: 170, riscv64: 170],
@@ -908,7 +927,7 @@ gen_syscalls! {
   // vm86
   // vm86old
   vmsplice(fd: RawFd, iov: *const iovec, nr_segs: size_t, flags: c_uint) /
-    { fd: RawFd, iov: Vec<iovec> @ counted_by(nr_segs), flags: c_uint } -> ssize_t
+    { fd: RawFd, iov: Vec<iovec> @ counted_by(raw_args.nr_segs), flags: c_uint } -> ssize_t
     ~ [Desc] for [x86_64: 278, aarch64: 75, riscv64: 75],
   wait4(pid: pid_t, wstatus: *mut c_int, options: c_int, rusage: *mut rusage) /
     { pid: pid_t, options: c_int } -> pid_t + { wstatus: InspectResult<c_int>, rusage: Option<rusage> }
@@ -917,9 +936,9 @@ gen_syscalls! {
     { idtype: idtype_t, id: id_t, options: c_int } -> c_int + { infop: Option<siginfo_t> }
     ~ [Process] for [x86_64: 247, aarch64: 95, riscv64: 95],
   // waitpid
-  write(fd: RawFd, buf: *const c_void, count: size_t) / { fd: RawFd, buf: Vec<u8> @ counted_by(count) } -> ssize_t
+  write(fd: RawFd, buf: *const c_void, count: size_t) / { fd: RawFd, buf: Vec<u8> @ counted_by(raw_args.count) } -> ssize_t
     ~ [Desc] for [x86_64: 1, aarch64: 64, riscv64: 64],
-  writev(fd: RawFd, iov: *const iovec, iovcnt: c_int) / { fd: RawFd, iov: Vec<iovec> @ counted_by(iovcnt) } -> ssize_t
+  writev(fd: RawFd, iov: *const iovec, iovcnt: c_int) / { fd: RawFd, iov: Vec<iovec> @ counted_by(raw_args.iovcnt) } -> ssize_t
     ~ [Desc] for [x86_64: 20, aarch64: 66, riscv64: 66],
 }
 
