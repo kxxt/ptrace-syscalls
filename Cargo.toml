@@ -2,10 +2,16 @@
 members = ["ptrace-syscalls-macros"] 
 
 
+[workspace.package]
+version = "0.0.0-experimental.0"
+authors = ["Levi Zim <rsworktech@outlook.com>"]
+
 [package]
 name = "ptrace-syscalls"
-description = "Linux syscalls primarily for usage in ptrace"
-version = "0.0.0-experimental.0"
+description = "Analyze syscalls via ptrace"
+keywords = ["ptrace", "syscall", "strace"]
+categories = ["os::linux-apis", "parser-implementations"]
+version.workspace = true
 license = "MIT"
 edition = "2021"
 
