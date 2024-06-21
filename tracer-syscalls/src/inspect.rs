@@ -277,37 +277,14 @@ const WORD_SIZE: usize = size_of::<c_long>();
 impl<T: Clone + PartialEq + ReprCMarker> InspectFromPid for InspectResult<T> {
   fn inspect_from(pid: Pid, mut address: AddressType) -> Self {
     let mut buf = MaybeUninit::<T>::uninit();
-    let mut ptr = buf.as_mut_ptr() as *mut c_long;
-    let ptr_end = unsafe { buf.as_mut_ptr().add(1) } as *mut c_long;
-    while ptr < ptr_end {
-      let word = match ptrace::read(pid, address) {
-        Err(errno) => {
-          return Err(InspectError::ReadFailure {
-            errno,
-            incomplete: None,
-          });
-        }
-        Ok(word) => word,
-      };
-      let remain = unsafe { ptr_end.offset_from(ptr) } as usize;
-      if remain < WORD_SIZE {
-        let word_bytes = word.to_ne_bytes();
-        for (idx, &byte) in word_bytes.iter().take(remain).enumerate() {
-          unsafe {
-            let ptr = (ptr as *mut u8).add(idx);
-            *ptr = byte;
-          }
-        }
-        break;
-      } else {
-        unsafe {
-          *ptr = word;
-          ptr = ptr.add(1);
-          address = address.add(WORD_SIZE);
-        }
-      }
+    unsafe {
+      read_by_ptrace_peek(pid, address, size_of::<T>(), buf.as_mut_ptr() as AddressType)
+        .map_err(|errno| InspectError::ReadFailure {
+          errno,
+          incomplete: None,
+        })?;
+      Ok(buf.assume_init())
     }
-    unsafe { Ok(buf.assume_init()) }
   }
 }
 
