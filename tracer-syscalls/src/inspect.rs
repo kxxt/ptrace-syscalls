@@ -408,26 +408,6 @@ impl InspectFromPid for InspectResult<PathBuf> {
   }
 }
 
-impl InspectDynSizedFromPid for InspectResult<Arc<rseq>> {
-  fn inspect_from(pid: Pid, address: AddressType, size: usize) -> Self {
-    let arc = unsafe {
-      Arc::<rseq>::try_new_slice_dst(size, |ptr| {
-        let read = read_remote_memory(pid, address, size, ptr.as_ptr() as AddressType)?;
-        if read != size {
-          return Err(Errno::EIO);
-        } else {
-          Ok(())
-        }
-      })
-    }
-    .map_err(|e| InspectError::ReadFailure {
-      errno: e,
-      incomplete: None,
-    })?;
-    Ok(arc)
-  }
-}
-
 impl InspectFromPid for InspectResult<Arc<statmount>> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     todo!()
@@ -568,3 +548,31 @@ where
     }
   }
 }
+
+macro_rules! impl_inspect_dst {
+  ($($t:ty),*) => {
+    $(
+      impl InspectDynSizedFromPid for InspectResult<Arc<$t>> {
+        fn inspect_from(pid: Pid, address: AddressType, size: usize) -> Self {
+          let arc = unsafe {
+            Arc::<$t>::try_new_slice_dst(size, |ptr| {
+              let read = read_remote_memory(pid, address, size, ptr.as_ptr() as AddressType)?;
+              if read != size {
+                return Err(Errno::EIO);
+              } else {
+                Ok(())
+              }
+            })
+          }
+          .map_err(|e| InspectError::ReadFailure {
+            errno: e,
+            incomplete: None,
+          })?;
+          Ok(arc)
+        }
+      }
+    )*
+  };
+}
+
+impl_inspect_dst!(rseq, statmount);

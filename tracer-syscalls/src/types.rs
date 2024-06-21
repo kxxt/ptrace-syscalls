@@ -225,32 +225,6 @@ pub struct mnt_id_req {
   pub param: u64,
 }
 
-#[derive(Debug, PartialEq)]
-#[repr(C)]
-pub struct statmount {
-  pub size: u32,
-  pub __spare1: u32,
-  pub mask: u64,
-  pub sb_dev_major: u32,
-  pub sb_dev_minor: u32,
-  pub sb_magic: u64,
-  pub sb_flags: u32,
-  pub fs_type: u32,
-  pub mnt_id: u64,
-  pub mnt_parent_id: u64,
-  pub mnt_id_old: u64,
-  pub mnt_parent_id_old: u64,
-  pub mnt_attr: u64,
-  pub mnt_propagation: u64,
-  pub mnt_peer_group: u64,
-  pub mnt_master: u64,
-  pub propagate_from: u64,
-  pub mnt_root: u32,
-  pub mnt_point: u32,
-  pub __spare2: [u64; 50],
-  pub str: [c_char],
-}
-
 #[derive(Debug, Clone, PartialEq)]
 #[repr(C)]
 pub struct ustat {
