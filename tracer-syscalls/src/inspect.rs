@@ -1,10 +1,5 @@
 use std::{
-  collections::BTreeMap,
-  ffi::{CString, OsString},
-  mem::{size_of, MaybeUninit},
-  os::{raw::c_void, unix::prelude::OsStringExt},
-  path::PathBuf,
-  sync::Arc,
+  collections::BTreeMap, f64::consts, ffi::{CString, OsString}, mem::{size_of, MaybeUninit}, ops::{Add, Not}, os::{raw::c_void, unix::prelude::OsStringExt}, path::PathBuf, sync::Arc
 };
 
 use itertools::chain;
@@ -12,9 +7,9 @@ use nix::{
   errno::Errno,
   libc::{
     c_int, c_long, c_ulong, clone_args, epoll_event, fd_set, iocb, iovec, itimerspec, itimerval,
-    mmsghdr, mq_attr, msghdr, msqid_ds, open_how, pollfd, rlimit, rlimit64, rusage, sched_attr,
-    sched_param, sembuf, shmid_ds, sigaction, sigevent, siginfo_t, sigset_t, sockaddr, stack_t,
-    stat, statfs, statx, sysinfo, timespec, timeval, timex, tms, utimbuf, utsname,
+    memcpy, mmsghdr, mq_attr, msghdr, msqid_ds, open_how, pollfd, rlimit, rlimit64, rusage,
+    sched_attr, sched_param, sembuf, shmid_ds, sigaction, sigevent, siginfo_t, sigset_t, sockaddr,
+    stack_t, stat, statfs, statx, sysinfo, timespec, timeval, timex, tms, utimbuf, utsname,
   },
   sys::ptrace::{self, AddressType},
   unistd::{sysconf, Pid, SysconfVar},
@@ -71,13 +66,58 @@ pub fn ptrace_getregs(pid: Pid) -> Result<PtraceRegisters, Errno> {
 
 static PAGE_SIZE: OnceCell<usize> = OnceCell::new();
 
-/// Read a remote memory buffer and put it into dest.
+/// Read a remote memory buffer by ptrace peek and put it into dest.
+unsafe fn read_by_ptrace_peek(
+  pid: Pid,
+  mut remote_addr: AddressType,
+  mut len: usize,
+  mut dest: AddressType,
+) -> Result<usize, Errno> {
+  // Check for address overflow.
+  if (remote_addr as usize).checked_add(len).is_none() {
+    return Err(Errno::EFAULT);
+  }
+  let mut total_read = 0;
+  let align_bytes = (remote_addr as usize) & (WORD_SIZE - 1);
+  if align_bytes != 0 {
+    let aligned_addr = ((remote_addr as usize) & (WORD_SIZE - 1).not()) as AddressType;
+    let word = ptrace::read(pid, aligned_addr)?;
+    let copy_len = len.min(remote_addr as usize - align_bytes);
+    memcpy(
+      dest,
+      (&word as *const c_long as *const c_void).byte_add(align_bytes),
+      copy_len,
+    );
+    remote_addr = remote_addr.byte_add(copy_len);
+    len -= copy_len;
+    total_read += copy_len;
+    dest = dest.byte_add(copy_len);
+  }
+
+  for _ in 0..(len / WORD_SIZE) {
+    let word = ptrace::read(pid, remote_addr)?;
+    memcpy(dest, &word as *const c_long as *const c_void, WORD_SIZE);
+    dest = dest.byte_add(WORD_SIZE);
+    remote_addr = remote_addr.byte_add(WORD_SIZE);
+    total_read += WORD_SIZE;
+  }
+  
+  let left_over = (len as usize) & (WORD_SIZE - 1);
+  if left_over > 0 {
+    let word = ptrace::read(pid, remote_addr)?;
+    memcpy(dest, &word as *const c_long as *const c_void, left_over);
+    total_read += left_over;
+  }
+  Ok(total_read)
+}
+
+/// Read a remote memory buffer by process_vm_readv and put it into dest.
 unsafe fn read_by_process_vm_readv(
   pid: Pid,
   remote_addr: AddressType,
   mut len: usize,
   dest: AddressType,
-) -> Result<(), Errno> {
+) -> Result<usize, Errno> {
   // liovcnt and riovcnt must be <= IOV_MAX
   const IOV_MAX: usize = nix::libc::_SC_IOV_MAX as usize;
   let mut riovs = [MaybeUninit::<nix::libc::iovec>::uninit(); IOV_MAX];
@@ -125,7 +165,7 @@ unsafe fn read_by_process_vm_readv(
     }
     total_read += read as usize;
   }
-  Ok(())
+  Ok(total_read)
 }
 
 #[derive(Debug, Clone, PartialEq)]
