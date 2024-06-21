@@ -11,7 +11,7 @@ use nix::{
     unistd::{execvp, fork, getpid, setpgid, ForkResult, Pid},
 };
 
-use tracer_syscalls::{ptrace_getregs, SyscallRawArgs, SyscallStopInspect};
+use ptrace_syscalls::{ptrace_getregs, SyscallRawArgs, SyscallStopInspect};
 
 fn ptrace_syscall(child: Pid, sig: Option<Signal>) -> Result<(), Errno> {
     match ptrace::syscall(child, sig) {
@@ -105,7 +105,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     raw_args = None;
                 } else {
                     // syscall-enter-stop
-                    let raw = tracer_syscalls::get_raw_args(pid)?;
+                    let raw = ptrace_syscalls::get_raw_args(pid)?;
                     eprintln!("{counter} syscall-raw  : {:?}", raw);
                     let args = raw.inspect_sysenter(pid);
                     raw_args = Some(raw);

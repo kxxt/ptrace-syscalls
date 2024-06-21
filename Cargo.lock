@@ -157,6 +157,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "ptrace-syscalls"
+version = "0.1.0"
+dependencies = [
+ "cfg-if",
+ "enumflags2",
+ "itertools",
+ "nix",
+ "once_cell",
+ "paste",
+ "ptrace-syscalls-macros",
+ "slice-dst",
+]
+
+[[package]]
+name = "ptrace-syscalls-macros"
+version = "0.1.0"
+dependencies = [
+ "convert_case",
+ "itertools",
+ "paste",
+ "proc-macro-crate",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "quote"
 version = "1.0.36"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -207,33 +234,6 @@ dependencies = [
  "indexmap",
  "toml_datetime",
  "winnow",
-]
-
-[[package]]
-name = "tracer-syscalls"
-version = "0.1.0"
-dependencies = [
- "cfg-if",
- "enumflags2",
- "itertools",
- "nix",
- "once_cell",
- "paste",
- "slice-dst",
- "tracer-syscalls-macros",
-]
-
-[[package]]
-name = "tracer-syscalls-macros"
-version = "0.1.0"
-dependencies = [
- "convert_case",
- "itertools",
- "paste",
- "proc-macro-crate",
- "proc-macro2",
- "quote",
- "syn",
 ]
 
 [[package]]

@@ -28,7 +28,7 @@ use nix::sys::ptrace::AddressType;
 use nix::unistd::Pid;
 use std::mem::size_of;
 use std::sync::Arc;
-use tracer_syscalls_macros::gen_syscalls;
+use ptrace_syscalls_macros::gen_syscalls;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct UnknownArgs {

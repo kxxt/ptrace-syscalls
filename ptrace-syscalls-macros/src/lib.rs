@@ -508,7 +508,7 @@ pub fn gen_syscalls(input: TokenStream) -> TokenStream {
     let mut modified_arg_struct_types = vec![];
     let mut supported_archs = vec![];
     let mut syscall_numbers = vec![];
-    let crate_token = get_crate("tracer-syscalls");
+    let crate_token = get_crate("ptrace-syscalls");
     let mut syscall_names_dedup = vec![];
     let mut supported_archs_dedup = vec![];
     let mut syscall_consts = vec![];

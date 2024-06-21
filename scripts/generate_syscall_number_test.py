@@ -14,7 +14,7 @@ def generate_syscall_number_test(rust_arch, arch):
     test_body = ""
     for name, value in getattr(system_calls, f"syscalls_{arch}").items():
         if name not in {"epoll_ctl_old", "epoll_wait_old"}:
-            test_body += f"    assert_eq!(tracer_syscalls::SYS_{name}, {value});\n"
+            test_body += f"    assert_eq!(ptrace_syscalls::SYS_{name}, {value});\n"
     return test_header + test_body + test_footer
 
 def write_syscall_number_test():
