@@ -2,6 +2,10 @@
 
 #![allow(non_camel_case_types)]
 
+mod dst;
+
+pub use dst::*;
+
 use std::ffi::c_void;
 
 use nix::libc::{
@@ -211,18 +215,6 @@ pub struct riscv_hwprobe {
   pub value: u64,
 }
 
-#[derive(Debug, PartialEq)]
-#[repr(C, align(32))]
-// aligned(4 * sizeof(__u64))
-pub struct rseq {
-  pub cpu_id_start: u32,
-  pub cpu_id: u32,
-  pub rseq_cs: u64,
-  pub flags: u32,
-  pub node_id: u32,
-  pub mm_cid: u32,
-  pub end: [c_char],
-}
 
 #[derive(Debug, Clone, PartialEq)]
 #[repr(C)]
@@ -255,8 +247,8 @@ pub struct statmount {
   pub propagate_from: u64,
   pub mnt_root: u32,
   pub mnt_point: u32,
-  pub __spare2: [u64;50],
-  pub str: [c_char]
+  pub __spare2: [u64; 50],
+  pub str: [c_char],
 }
 
 #[derive(Debug, Clone, PartialEq)]

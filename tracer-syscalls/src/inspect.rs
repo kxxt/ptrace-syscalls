@@ -1,5 +1,12 @@
 use std::{
-  collections::BTreeMap, f64::consts, ffi::{CString, OsString}, mem::{size_of, MaybeUninit}, ops::{Add, Not}, os::{raw::c_void, unix::prelude::OsStringExt}, path::PathBuf, sync::Arc
+  collections::BTreeMap,
+  f64::consts,
+  ffi::{CString, OsString},
+  mem::{size_of, MaybeUninit},
+  ops::{Add, Not},
+  os::{raw::c_void, unix::prelude::OsStringExt},
+  path::PathBuf,
+  sync::Arc,
 };
 
 use itertools::chain;
@@ -15,6 +22,7 @@ use nix::{
   unistd::{sysconf, Pid, SysconfVar},
 };
 use once_cell::sync::OnceCell;
+use slice_dst::TryAllocSliceDst;
 
 use crate::{
   arch::PtraceRegisters,
@@ -101,7 +109,7 @@ unsafe fn read_by_ptrace_peek(
     remote_addr = remote_addr.byte_add(WORD_SIZE);
     total_read += WORD_SIZE;
   }
-  
+
   let left_over = (len as usize) & (WORD_SIZE - 1);
   if left_over > 0 {
     let word = ptrace::read(pid, remote_addr)?;
@@ -172,8 +180,8 @@ unsafe fn read_by_process_vm_readv(
 pub enum InspectError<T: Clone + PartialEq> {
   /// The syscall failed thus the sysexit-stop inspection is not done.
   SyscallFailure,
-  /// Ptrace failed when trying to inspect the tracee memory.
-  PtraceFailure { errno: Errno, incomplete: Option<T> },
+  /// failed when trying to inspect the tracee memory.
+  ReadFailure { errno: Errno, incomplete: Option<T> },
   /// A dependency inspection of this inspection failed.
   DependencyInspectFailure { field: &'static str },
 }
@@ -187,7 +195,7 @@ impl<T: Clone + PartialEq> InspectError<T> {
   ) -> InspectError<U> {
     match self {
       InspectError::SyscallFailure => InspectError::SyscallFailure,
-      InspectError::PtraceFailure { errno, incomplete } => InspectError::PtraceFailure {
+      InspectError::ReadFailure { errno, incomplete } => InspectError::ReadFailure {
         errno,
         incomplete: incomplete.map(f),
       },
@@ -274,7 +282,7 @@ impl<T: Clone + PartialEq + ReprCMarker> InspectFromPid for InspectResult<T> {
     while ptr < ptr_end {
       let word = match ptrace::read(pid, address) {
         Err(errno) => {
-          return Err(InspectError::PtraceFailure {
+          return Err(InspectError::ReadFailure {
             errno,
             incomplete: None,
           });
@@ -319,7 +327,7 @@ fn read_generic_string<TString: Clone + PartialEq>(
   loop {
     let word = match ptrace::read(pid, address) {
       Err(e) => {
-        return Err(InspectError::PtraceFailure {
+        return Err(InspectError::ReadFailure {
           errno: e,
           incomplete: Some(ctor(buf)),
         });
@@ -363,7 +371,7 @@ where
   loop {
     let ptr = match ptrace::read(pid, address) {
       Err(errno) => {
-        return Err(InspectError::PtraceFailure {
+        return Err(InspectError::ReadFailure {
           errno,
           incomplete: Some(res),
         });
@@ -390,7 +398,21 @@ impl InspectFromPid for InspectResult<PathBuf> {
 
 impl InspectDynSizedFromPid for InspectResult<Arc<rseq>> {
   fn inspect_from(pid: Pid, address: AddressType, size: usize) -> Self {
-    todo!()
+    let arc = unsafe {
+      Arc::<rseq>::try_new_slice_dst(size, |ptr| {
+        let read = read_by_process_vm_readv(pid, address, size, ptr.as_ptr() as AddressType)?;
+        if read != size {
+          return Err(Errno::EIO);
+        } else {
+          Ok(())
+        }
+      })
+    }
+    .map_err(|e| InspectError::ReadFailure {
+      errno: e,
+      incomplete: None,
+    })?;
+    Ok(arc)
   }
 }
 
