@@ -6,7 +6,10 @@ use std::{
   ops::{Add, Not},
   os::{raw::c_void, unix::prelude::OsStringExt},
   path::PathBuf,
-  sync::Arc,
+  sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+  },
 };
 
 use itertools::chain;
@@ -73,6 +76,33 @@ pub fn ptrace_getregs(pid: Pid) -> Result<PtraceRegisters, Errno> {
 }
 
 static PAGE_SIZE: OnceCell<usize> = OnceCell::new();
+static SHOULD_USE_PROCESS_VM_READV: AtomicBool = AtomicBool::new(true);
+
+/// Read a remote memory buffer and put it into dest.
+unsafe fn read_remote_memory(
+  pid: Pid,
+  remote_addr: AddressType,
+  len: usize,
+  dest: AddressType,
+) -> Result<usize, Errno> {
+  // if the length is less than 2 words, use ptrace peek
+  // TODO: This is heuristic and a benchmark is needed to determine the threshold.
+  if len < WORD_SIZE * 2 {
+    read_by_ptrace_peek(pid, remote_addr, len, dest)
+  } else {
+    if SHOULD_USE_PROCESS_VM_READV.load(Ordering::Relaxed) {
+      let result = read_by_process_vm_readv(pid, remote_addr, len, dest);
+      result
+        .map_err(|e| {
+          SHOULD_USE_PROCESS_VM_READV.store(false, Ordering::SeqCst);
+          e
+        })
+        .or_else(|_| read_by_ptrace_peek(pid, remote_addr, len, dest))
+    } else {
+      read_by_ptrace_peek(pid, remote_addr, len, dest)
+    }
+  }
+}
 
 /// Read a remote memory buffer by ptrace peek and put it into dest.
 unsafe fn read_by_ptrace_peek(
@@ -278,11 +308,16 @@ impl<T: Clone + PartialEq + ReprCMarker> InspectFromPid for InspectResult<T> {
   fn inspect_from(pid: Pid, mut address: AddressType) -> Self {
     let mut buf = MaybeUninit::<T>::uninit();
     unsafe {
-      read_by_ptrace_peek(pid, address, size_of::<T>(), buf.as_mut_ptr() as AddressType)
-        .map_err(|errno| InspectError::ReadFailure {
-          errno,
-          incomplete: None,
-        })?;
+      read_remote_memory(
+        pid,
+        address,
+        size_of::<T>(),
+        buf.as_mut_ptr() as AddressType,
+      )
+      .map_err(|errno| InspectError::ReadFailure {
+        errno,
+        incomplete: None,
+      })?;
       Ok(buf.assume_init())
     }
   }
@@ -377,7 +412,7 @@ impl InspectDynSizedFromPid for InspectResult<Arc<rseq>> {
   fn inspect_from(pid: Pid, address: AddressType, size: usize) -> Self {
     let arc = unsafe {
       Arc::<rseq>::try_new_slice_dst(size, |ptr| {
-        let read = read_by_process_vm_readv(pid, address, size, ptr.as_ptr() as AddressType)?;
+        let read = read_remote_memory(pid, address, size, ptr.as_ptr() as AddressType)?;
         if read != size {
           return Err(Errno::EIO);
         } else {
