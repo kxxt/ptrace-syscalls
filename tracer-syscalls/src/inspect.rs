@@ -11,14 +11,15 @@ use itertools::chain;
 use nix::{
   errno::Errno,
   libc::{
-    c_int, c_long, clone_args, epoll_event, fd_set, iocb, iovec, itimerspec, itimerval, mmsghdr,
-    mq_attr, msghdr, msqid_ds, open_how, pollfd, rlimit, rlimit64, rusage, sched_attr, sched_param,
-    sembuf, shmid_ds, sigaction, sigevent, siginfo_t, sigset_t, sockaddr, stack_t, stat, statfs,
-    statx, sysinfo, timespec, timeval, timex, tms, utimbuf, utsname,
+    c_int, c_long, c_ulong, clone_args, epoll_event, fd_set, iocb, iovec, itimerspec, itimerval,
+    mmsghdr, mq_attr, msghdr, msqid_ds, open_how, pollfd, rlimit, rlimit64, rusage, sched_attr,
+    sched_param, sembuf, shmid_ds, sigaction, sigevent, siginfo_t, sigset_t, sockaddr, stack_t,
+    stat, statfs, statx, sysinfo, timespec, timeval, timex, tms, utimbuf, utsname,
   },
   sys::ptrace::{self, AddressType},
-  unistd::Pid,
+  unistd::{sysconf, Pid, SysconfVar},
 };
+use once_cell::sync::OnceCell;
 
 use crate::{
   arch::PtraceRegisters,
@@ -66,6 +67,65 @@ pub fn ptrace_getregs(pid: Pid) -> Result<PtraceRegisters, Errno> {
           Ok(regs)
       }
   }
+}
+
+static PAGE_SIZE: OnceCell<usize> = OnceCell::new();
+
+/// Read a remote memory buffer and put it into dest.
+unsafe fn read_by_process_vm_readv(
+  pid: Pid,
+  remote_addr: AddressType,
+  mut len: usize,
+  dest: AddressType,
+) -> Result<(), Errno> {
+  // liovcnt and riovcnt must be <= IOV_MAX
+  const IOV_MAX: usize = nix::libc::_SC_IOV_MAX as usize;
+  let mut riovs = [MaybeUninit::<nix::libc::iovec>::uninit(); IOV_MAX];
+  let mut cur = remote_addr;
+  let mut total_read = 0;
+  while len > 0 {
+    let dst_iov = iovec {
+      iov_base: dest.byte_add(total_read),
+      iov_len: len,
+    };
+    let mut riov_used = 0;
+    while len > 0 {
+      if riov_used == IOV_MAX {
+        break;
+      }
+
+      // struct iovec uses void* for iov_base.
+      if cur >= usize::MAX as AddressType {
+        return Err(Errno::EFAULT);
+      }
+      riovs[riov_used].assume_init_mut().iov_base = cur;
+      let page_size = *PAGE_SIZE.get_or_init(|| {
+        sysconf(SysconfVar::PAGE_SIZE)
+          .expect("Failed to get page size")
+          .unwrap() as usize
+      });
+      let misalignment = (cur as usize) & (page_size - 1);
+      let iov_len = (page_size - misalignment).min(len);
+      len -= iov_len;
+      // pointer types don't have checked_add ???
+      cur = (cur as usize).checked_add(iov_len).ok_or(Errno::EFAULT)? as AddressType;
+      riovs[riov_used].assume_init_mut().iov_len = iov_len;
+      riov_used += 1;
+    }
+    let read = nix::libc::process_vm_readv(
+      pid.into(),
+      &dst_iov as *const _,
+      1,
+      &riovs as *const _ as *const iovec,
+      riov_used as c_ulong,
+      0,
+    );
+    if read == -1 {
+      return Err(Errno::last());
+    }
+    total_read += read as usize;
+  }
+  Ok(())
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -162,6 +222,8 @@ pub(crate) trait InspectDynSizedFromPid {
   fn inspect_from(pid: Pid, address: AddressType, size: usize) -> Self;
 }
 
+// TODO: impl process_vm_read and ptrace read
+// https://android.googlesource.com/platform/system/core/+/android-9.0.0_r16/libunwindstack/Memory.cpp
 const WORD_SIZE: usize = size_of::<c_long>();
 
 impl<T: Clone + PartialEq + ReprCMarker> InspectFromPid for InspectResult<T> {
