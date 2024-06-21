@@ -5,7 +5,7 @@ members = ["ptrace-syscalls-macros"]
 [package]
 name = "ptrace-syscalls"
 description = "Linux syscalls primarily for usage in ptrace"
-version = "0.1.0"
+version = "0.0.0-experimental.0"
 license = "MIT"
 edition = "2021"
 
@@ -17,7 +17,7 @@ nix = { version = "0.29.0", features = ["process", "ptrace", "feature"] }
 once_cell = "1.19.0"
 paste = "1.0.15"
 slice-dst = "1.5.1"
-ptrace-syscalls-macros = { version = "0.1.0", path = "./ptrace-syscalls-macros" }
+ptrace-syscalls-macros = { version = "0.0.0-experimental.0", path = "./ptrace-syscalls-macros" }
 
 [dev-dependencies]
 nix = { version = "0.29.0", features = ["process", "ptrace", "signal"] }
