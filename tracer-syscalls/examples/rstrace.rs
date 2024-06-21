@@ -106,6 +106,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         } else {
           // syscall-enter-stop
           let raw = tracer_syscalls::get_raw_args(pid)?;
+          eprintln!("{counter} syscall-raw  : {:?}", raw);
           let args = raw.inspect_sysenter(pid);
           raw_args = Some(raw);
           eprintln!("{counter} syscall-enter: {:?}", args);
