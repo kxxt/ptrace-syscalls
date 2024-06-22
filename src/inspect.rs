@@ -1,7 +1,7 @@
 use std::{
   ffi::{CString, OsString},
   mem::{size_of, MaybeUninit},
-  ops::{Add, Not},
+  ops::Not,
   os::{raw::c_void, unix::prelude::OsStringExt},
   path::PathBuf,
   sync::{

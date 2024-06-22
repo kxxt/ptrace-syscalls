@@ -1,13 +1,12 @@
 use convert_case::{Case, Casing};
-use paste::paste;
 use proc_macro::TokenStream;
 use proc_macro2::Span;
 use proc_macro_crate::{crate_name, FoundCrate};
 use quote::{format_ident, quote, quote_spanned, ToTokens};
 use syn::{
   braced, bracketed, parenthesized, parse::Parse, parse_macro_input, punctuated::Punctuated,
-  spanned::Spanned, token, Expr, Field, GenericArgument, Ident, PathArguments, Token, Type,
-  TypePath,
+  spanned::Spanned, token, Expr,  GenericArgument, Ident, PathArguments, Token, Type,
+  
 };
 
 #[allow(dead_code)]
@@ -62,7 +61,7 @@ impl Decoder {
       let tmp_name = format_ident!("tmp_{}", counter);
       quote_spanned! {
         span =>
-        let #arg_name = if let Some(&#tmp_name) = (#args).as_ref().ok() {
+        let #arg_name = if let Ok(&#tmp_name) = (#args).as_ref() {
           <#arg_type as #target_trait>::inspect_from(inspectee_pid, raw_args.#arg_name as AddressType, #tmp_name as usize)
         } else {
           Err(InspectError::DependencyInspectFailure { field: stringify!(#arg_name) })
@@ -176,6 +175,7 @@ impl Parse for SyscallEntry {
   }
 }
 
+#[allow(dead_code)]
 struct Arch {
   name: syn::Ident,
   colon: Token![:],
@@ -272,7 +272,7 @@ fn gen_syscall_args_struct(
     arg_names.push(arg_name.clone());
     let arg_type = &arg.ty;
     let (wrapped_arg_type, need_memory_inspection) =
-      wrap_syscall_arg_type(arg_type, crate_token.clone(), span);
+      wrap_syscall_arg_type(arg_type, span);
     wrapped_arg_types.push(wrapped_arg_type.clone());
     if !need_memory_inspection {
       let inspect = quote_spanned! { span =>
@@ -331,22 +331,20 @@ fn gen_syscall_args_struct(
       });
       let arg_type = &modified_arg.ty;
       let (wrapped_arg_type, need_memory_inspection) =
-        wrap_syscall_arg_type(arg_type, crate_token.clone(), span);
+        wrap_syscall_arg_type(arg_type, span);
       modified_arg_types.push(wrapped_arg_type.clone());
       if !need_memory_inspection {
         let inspect = quote_spanned! { span =>
           let #arg_name = raw_args.#arg_name as #wrapped_arg_type;
         };
         inspect_modified_args.push(inspect);
+      } else if let Some(decoder) = &modified_arg.decoder {
+        let decoded = decoder.decoded(arg_name, wrapped_arg_type, span);
+        inspect_modified_args.push(decoded);
       } else {
-        if let Some(decoder) = &modified_arg.decoder {
-          let decoded = decoder.decoded(arg_name, wrapped_arg_type, span);
-          inspect_modified_args.push(decoded);
-        } else {
-          inspect_modified_args.push(quote_spanned! { span =>
+        inspect_modified_args.push(quote_spanned! { span =>
             let #arg_name: #wrapped_arg_type = #crate_token::InspectFromPid::inspect_from(inspectee_pid, raw_args.#arg_name as #crate_token::AddressType);
-          });
-        }
+        });
       }
     }
   }
@@ -737,7 +735,6 @@ fn get_crate(name: &str) -> proc_macro2::TokenStream {
 /// returns: (wrapped type, needs memory inspection)
 fn wrap_syscall_arg_type(
   ty: &Type,
-  crate_token: proc_macro2::TokenStream,
   span: Span,
 ) -> (proc_macro2::TokenStream, bool) {
   match ty {
