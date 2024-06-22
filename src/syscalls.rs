@@ -511,7 +511,7 @@ gen_syscalls! {
     { dirfd: RawFd, pathname: PathBuf, flags: c_int } -> c_int + { handle: Vec<u8> @ counted_by(todo!()), mount_id: InspectResult<c_int> }
     ~ [Desc, File] for [x86_64: 303, aarch64: 264, riscv64: 264],
   nanosleep(req: *const timespec, rem: *mut timespec) / { req: timespec } -> c_int + { rem: Option<timespec> }
-    ~ [Clock] for [x86_64: 35, aarch64: 230, riscv64: 230],
+    ~ [Clock] for [x86_64: 35, aarch64: 101, riscv64: 101],
   newfstatat(dirfd: RawFd, pathname: *const c_char, statbuf: *mut stat, flags: c_int) /
     { dirfd: RawFd, pathname: PathBuf, flags: c_int } -> c_int + { statbuf: stat }
     ~ [Desc, File, FStat, StatLike] for [x86_64: 262, aarch64: 79, riscv64: 79],
@@ -833,7 +833,7 @@ gen_syscalls! {
     ~ [File, Stat, StatLike] for [x86_64: 4],
   // stat64
   statfs(path: *const c_char, buf: *mut statfs) / { path: PathBuf } -> c_int + { buf: statfs }
-    ~ [File, StatFs, StatFsLike] for [x86_64: 137, aarch64: 99, riscv64: 99],
+    ~ [File, StatFs, StatFsLike] for [x86_64: 137, aarch64: 43, riscv64: 43],
   // statfs64
   // statmount: TODO
   statmount(req: *const mnt_id_req, buf: *mut c_void, bufsize: size_t, flags: c_uint) /
@@ -845,7 +845,7 @@ gen_syscalls! {
   // stime
   // subpage_prot
   // swapcontext
-  swapoff(path: *const c_char) / { path: PathBuf } -> c_int ~ [File] for [x86_64: 168, aarch64: 255, riscv64: 255],
+  swapoff(path: *const c_char) / { path: PathBuf } -> c_int ~ [File] for [x86_64: 168, aarch64: 225, riscv64: 225],
   swapon(path: *const c_char, swapflags: c_int) / { path: PathBuf, swapflags: c_int } -> c_int
     ~ [File] for [x86_64: 167, aarch64: 224, riscv64: 224],
   // switch_endian
