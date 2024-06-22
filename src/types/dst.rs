@@ -1,18 +1,41 @@
-use std::alloc::Layout;
+use std::{alloc::Layout, sync::Arc};
 
-use nix::libc::c_char;
-use slice_dst::SliceDst;
+use crate::{
+  read_remote_memory, AddressType, InspectDynSizedFromPid, InspectError, InspectResult, Pid,
+};
+use nix::{errno::Errno, libc::c_char};
+use slice_dst::{SliceDst, TryAllocSliceDst};
 
 macro_rules! impl_slice_dst {
-  ($($t:ty => $a:literal),*) => {
+  ($($t:ty => $other:literal @ $a:literal),*) => {
     $(
       unsafe impl SliceDst for $t {
         fn layout_for(len: usize) -> std::alloc::Layout {
-          Layout::from_size_align(len, $a).unwrap()
+          Layout::from_size_align(len + $other, $a).unwrap()
         }
 
         fn retype(ptr: std::ptr::NonNull<[()]>) -> std::ptr::NonNull<Self> {
           unsafe { std::ptr::NonNull::new_unchecked(ptr.as_ptr() as *mut _) }
+        }
+      }
+
+      impl InspectDynSizedFromPid for InspectResult<Arc<$t>> {
+        fn inspect_from(pid: Pid, address: AddressType, size: usize) -> Self {
+          let arc = unsafe {
+            Arc::<$t>::try_new_slice_dst(size - $other, |ptr| {
+              let read = read_remote_memory(pid, address, size, ptr.as_ptr() as AddressType)?;
+              if read != size {
+                return Err(Errno::EIO);
+              } else {
+                Ok(())
+              }
+            })
+          }
+          .map_err(|e| InspectError::ReadFailure {
+            errno: e,
+            incomplete: None,
+          })?;
+          Ok(arc)
         }
       }
     )*
@@ -20,8 +43,8 @@ macro_rules! impl_slice_dst {
 }
 
 impl_slice_dst! {
-  rseq => 32,
-  statmount => 8
+  rseq => 32 @ 32,
+  statmount => 520 @ 8
 }
 
 #[derive(Debug, PartialEq)]

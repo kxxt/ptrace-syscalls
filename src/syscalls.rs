@@ -835,9 +835,9 @@ gen_syscalls! {
   statfs(path: *const c_char, buf: *mut statfs) / { path: PathBuf } -> c_int + { buf: statfs }
     ~ [File, StatFs, StatFsLike] for [x86_64: 137, aarch64: 43, riscv64: 43],
   // statfs64
-  // statmount: TODO
+  // statmount: TODO: the length is the first field of the struct
   statmount(req: *const mnt_id_req, buf: *mut c_void, bufsize: size_t, flags: c_uint) /
-    { req: mnt_id_req, bufsize: size_t, flags: c_uint } -> c_int + { buf: Arc<statmount> }
+    { req: mnt_id_req, bufsize: size_t, flags: c_uint } -> c_int + { buf: Arc<statmount> @ sized_by(raw_args.bufsize) }
     ~ [] for [x86_64: 457, aarch64: 457, riscv64: 457],
   statx(dirfd: RawFd, pathname: *const c_char, flags: c_int, mask: c_uint, statxbuf: *mut statx) /
     { dirfd: RawFd, pathname: PathBuf, flags: c_int, mask: c_uint } -> c_int + { statxbuf: statx }

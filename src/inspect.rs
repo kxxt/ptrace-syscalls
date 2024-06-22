@@ -4,10 +4,7 @@ use std::{
   ops::Not,
   os::{raw::c_void, unix::prelude::OsStringExt},
   path::PathBuf,
-  sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc,
-  },
+  sync::atomic::{AtomicBool, Ordering},
 };
 
 use nix::{
@@ -22,14 +19,13 @@ use nix::{
   unistd::{sysconf, Pid, SysconfVar},
 };
 use once_cell::sync::OnceCell;
-use slice_dst::TryAllocSliceDst;
 
 use crate::{
   arch::PtraceRegisters,
   types::{
     __aio_sigset, __mount_arg, cachestat, cachestat_range, cap_user_data, cap_user_header,
     futex_waitv, io_event, io_uring_params, kexec_segment, landlock_ruleset_attr, linux_dirent,
-    linux_dirent64, mnt_id_req, mount_attr, rseq, statmount, timezone, ustat,
+    linux_dirent64, mnt_id_req, mount_attr, timezone, ustat,
   },
 };
 
@@ -76,7 +72,11 @@ static PAGE_SIZE: OnceCell<usize> = OnceCell::new();
 static SHOULD_USE_PROCESS_VM_READV: AtomicBool = AtomicBool::new(true);
 
 /// Read a remote memory buffer and put it into dest.
-unsafe fn read_remote_memory(
+///
+/// # Safety
+///
+/// The caller must ensure that the dest buffer is large enough to hold the data.
+pub unsafe fn read_remote_memory(
   pid: Pid,
   remote_addr: AddressType,
   len: usize,
@@ -520,31 +520,3 @@ where
     }
   }
 }
-
-macro_rules! impl_inspect_dst {
-  ($($t:ty),*) => {
-    $(
-      impl InspectDynSizedFromPid for InspectResult<Arc<$t>> {
-        fn inspect_from(pid: Pid, address: AddressType, size: usize) -> Self {
-          let arc = unsafe {
-            Arc::<$t>::try_new_slice_dst(size, |ptr| {
-              let read = read_remote_memory(pid, address, size, ptr.as_ptr() as AddressType)?;
-              if read != size {
-                return Err(Errno::EIO);
-              } else {
-                Ok(())
-              }
-            })
-          }
-          .map_err(|e| InspectError::ReadFailure {
-            errno: e,
-            incomplete: None,
-          })?;
-          Ok(arc)
-        }
-      }
-    )*
-  };
-}
-
-impl_inspect_dst!(rseq, statmount);

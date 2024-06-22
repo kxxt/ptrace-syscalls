@@ -99,7 +99,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         if let Some(raw) = raw_args {
           // syscall-exit-stop
           let regs = ptrace_getregs(pid)?;
-          let modified_args = raw_args.unwrap().inspect_sysexit(pid, &regs);
+          let modified_args = raw.inspect_sysexit(pid, &regs);
           eprintln!("{counter} syscall-exit : {:?}", modified_args);
           counter += 1;
           raw_args = None;
