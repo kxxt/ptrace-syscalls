@@ -751,11 +751,13 @@ fn wrap_syscall_arg_type(
       let ty_str = ty.to_token_stream().to_string();
       match ty_str.as_str() {
         "Unit" => (quote_spanned!(span => ()), false),
+        // Primitive types
         "RawFd" | "socklen_t" | "c_int" | "c_uint" | "c_ulong" | "c_long" | "i16" | "i32"
         | "i64" | "u64" | "usize" | "isize" | "size_t" | "key_serial_t" | "AddressType"
         | "mode_t" | "uid_t" | "pid_t" | "gid_t" | "off_t" | "u32" | "clockid_t" | "id_t"
         | "key_t" | "mqd_t" | "aio_context_t" | "dev_t" | "nfds_t" | "loff_t" | "qid_t"
         | "idtype_t" | "time_t" | "timer_t" => (ty.to_token_stream(), false),
+        // Types that need to be wrapped
         "sockaddr"
         | "CString"
         | "PathBuf"
