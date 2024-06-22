@@ -1,8 +1,7 @@
-
 /// Automatically generated syscall number tests by generate_syscall_number_test.py
 #[cfg(test)]
 mod syscall_number_tests {
-    
+
   #[cfg(target_arch = "riscv64")]
   #[test]
   fn test_riscv64_syscall_numbers() {
@@ -318,9 +317,8 @@ mod syscall_number_tests {
     assert_eq!(ptrace_syscalls::SYS_waitid, 95);
     assert_eq!(ptrace_syscalls::SYS_write, 64);
     assert_eq!(ptrace_syscalls::SYS_writev, 66);
-
   }
-    
+
   #[cfg(target_arch = "x86_64")]
   #[test]
   fn test_x86_64_syscall_numbers() {
@@ -678,9 +676,8 @@ mod syscall_number_tests {
     assert_eq!(ptrace_syscalls::SYS_waitid, 247);
     assert_eq!(ptrace_syscalls::SYS_write, 1);
     assert_eq!(ptrace_syscalls::SYS_writev, 20);
-
   }
-    
+
   #[cfg(target_arch = "aarch64")]
   #[test]
   fn test_aarch64_syscall_numbers() {
@@ -995,7 +992,5 @@ mod syscall_number_tests {
     assert_eq!(ptrace_syscalls::SYS_waitid, 95);
     assert_eq!(ptrace_syscalls::SYS_write, 64);
     assert_eq!(ptrace_syscalls::SYS_writev, 66);
-
   }
-    
 }

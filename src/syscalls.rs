@@ -3,64 +3,64 @@
 
 use std::path::PathBuf;
 use std::{
-    ffi::{c_int, CString},
-    os::fd::RawFd,
+  ffi::{c_int, CString},
+  os::fd::RawFd,
 };
 
 use crate::{
-    arch::{syscall_arg, syscall_no_from_regs, syscall_res_from_regs, PtraceRegisters},
-    types::*,
-    InspectCountedFromPid, InspectDynSizedFromPid, InspectError, InspectFromPid, InspectResult,
-    SyscallNumber, SyscallStopInspect,
+  arch::{syscall_arg, syscall_no_from_regs, syscall_res_from_regs, PtraceRegisters},
+  types::*,
+  InspectCountedFromPid, InspectDynSizedFromPid, InspectError, InspectFromPid, InspectResult,
+  SyscallNumber, SyscallStopInspect,
 };
 use crate::{ptrace_getregs, SyscallGroups, SyscallGroupsGetter};
 use enumflags2::BitFlags;
 use nix::errno::Errno;
 use nix::libc::{
-    c_char, c_long, c_uchar, c_uint, c_ulong, c_void, clock_t, clockid_t, clone_args, dev_t,
-    epoll_event, fd_set, gid_t, id_t, idtype_t, iocb, iovec, itimerspec, itimerval, key_t, loff_t,
-    mmsghdr, mode_t, mq_attr, mqd_t, msghdr, msqid_ds, nfds_t, off_t, open_how, pid_t, pollfd,
-    rlimit, rlimit64, rusage, sched_attr, sched_param, sembuf, shmid_ds, sigaction, sigevent,
-    siginfo_t, sigset_t, size_t, sockaddr, socklen_t, ssize_t, stack_t, stat, statfs, statx,
-    sysinfo, time_t, timer_t, timespec, timeval, timex, tms, uid_t, utimbuf, utsname,
+  c_char, c_long, c_uchar, c_uint, c_ulong, c_void, clock_t, clockid_t, clone_args, dev_t,
+  epoll_event, fd_set, gid_t, id_t, idtype_t, iocb, iovec, itimerspec, itimerval, key_t, loff_t,
+  mmsghdr, mode_t, mq_attr, mqd_t, msghdr, msqid_ds, nfds_t, off_t, open_how, pid_t, pollfd,
+  rlimit, rlimit64, rusage, sched_attr, sched_param, sembuf, shmid_ds, sigaction, sigevent,
+  siginfo_t, sigset_t, size_t, sockaddr, socklen_t, ssize_t, stack_t, stat, statfs, statx, sysinfo,
+  time_t, timer_t, timespec, timeval, timex, tms, uid_t, utimbuf, utsname,
 };
 use nix::sys::ptrace::AddressType;
 use nix::unistd::Pid;
+use ptrace_syscalls_macros::gen_syscalls;
 use std::mem::size_of;
 use std::sync::Arc;
-use ptrace_syscalls_macros::gen_syscalls;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct UnknownArgs {
-    pub number: isize,
-    pub args: [usize; 6],
+  pub number: isize,
+  pub args: [usize; 6],
 }
 
 impl UnknownArgs {
-    fn from_regs(regs: &PtraceRegisters) -> Self {
-        let number = syscall_no_from_regs!(regs) as isize;
-        let args = [
-            syscall_arg!(regs, 0) as usize,
-            syscall_arg!(regs, 1) as usize,
-            syscall_arg!(regs, 2) as usize,
-            syscall_arg!(regs, 3) as usize,
-            syscall_arg!(regs, 4) as usize,
-            syscall_arg!(regs, 5) as usize,
-        ];
-        UnknownArgs { number, args }
-    }
+  fn from_regs(regs: &PtraceRegisters) -> Self {
+    let number = syscall_no_from_regs!(regs) as isize;
+    let args = [
+      syscall_arg!(regs, 0) as usize,
+      syscall_arg!(regs, 1) as usize,
+      syscall_arg!(regs, 2) as usize,
+      syscall_arg!(regs, 3) as usize,
+      syscall_arg!(regs, 4) as usize,
+      syscall_arg!(regs, 5) as usize,
+    ];
+    UnknownArgs { number, args }
+  }
 }
 
 impl SyscallNumber for UnknownArgs {
-    fn syscall_number(&self) -> isize {
-        self.number
-    }
+  fn syscall_number(&self) -> isize {
+    self.number
+  }
 }
 
 impl SyscallGroupsGetter for UnknownArgs {
-    fn syscall_groups(&self) -> BitFlags<SyscallGroups> {
-        BitFlags::empty()
-    }
+  fn syscall_groups(&self) -> BitFlags<SyscallGroups> {
+    BitFlags::empty()
+  }
 }
 
 pub type Unit = ();
@@ -945,11 +945,11 @@ gen_syscalls! {
 // pub use cfg_if_has_syscall;
 
 impl SyscallRawArgs {
-    /// Get the raw arguments of a syscall on syscall-enter stop.
-    ///
-    /// Calling this function elsewhere will result in incorrect results or errors.
-    pub fn get_on_sysenter(pid: Pid) -> Result<Self, Errno> {
-        let regs = ptrace_getregs(pid)?;
-        Ok(Self::from_regs(&regs))
-    }
+  /// Get the raw arguments of a syscall on syscall-enter stop.
+  ///
+  /// Calling this function elsewhere will result in incorrect results or errors.
+  pub fn get_on_sysenter(pid: Pid) -> Result<Self, Errno> {
+    let regs = ptrace_getregs(pid)?;
+    Ok(Self::from_regs(&regs))
+  }
 }
