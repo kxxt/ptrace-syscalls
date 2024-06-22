@@ -1,5 +1,7 @@
 # ptrace-syscalls
 
+[![Crate](https://img.shields.io/crates/v/ptrace-syscalls.svg)](https://crates.io/crates/ptrace-syscalls) [![Docs](https://docs.rs/libc/badge.svg)](https://docs.rs/ptrace-syscalls) ![License](https://img.shields.io/crates/l/ptrace-syscalls.svg)
+
 ## !!! WORK IN PROGRESS !!!
 
 ## !!! THIS CRATE IS NOT READY FOR PRODUCTION !!!
