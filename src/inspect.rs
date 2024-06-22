@@ -241,11 +241,11 @@ pub trait SyscallStopInspect: Copy {
 }
 
 /// Marker trait for sized repr(C) structs
+///
+/// # Safety
+///
+/// This trait should only be implemented for Sized repr(C) structs. Implementing this trait for other types will lead to undefined behavior.
 pub(crate) unsafe trait ReprCMarker {}
-// /// Marker trait for inspecting nullable pointers
-// pub(crate) unsafe trait OptionMarker {}
-/// Special marker trait that serves as a hack :(
-pub(crate) unsafe trait SpecialMarker {}
 
 macro_rules! impl_marker {
   ($marker:ty => $($ty:ty),*) => {
@@ -275,11 +275,6 @@ impl_marker! {
 //   sigevent, stack_t, itimerval, sigaction, fd_set, rlimit64, sockaddr, epoll_event, sigset_t,
 //   siginfo_t, mq_attr, timezone
 // }
-
-impl_marker! {
-  SpecialMarker =>
-  CString, PathBuf, Vec<CString>
-}
 
 /// Use ptrace to inspect the process with the given pid and return the inspection result.
 pub(crate) trait InspectFromPid {
