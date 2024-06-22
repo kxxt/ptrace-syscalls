@@ -263,18 +263,6 @@ impl_marker! {
   sigevent, mmsghdr, msghdr, sigset_t
 }
 
-// impl_marker! {
-//   OptionMarker =>
-//   // primitives
-//   i64, u64, i32, u32,
-//   // Special
-//   CString, PathBuf, Vec<CString>,
-//   // repr(C) structs
-//   rusage, statfs, statx, timespec, timeval, timex, tms, utimbuf, utsname, itimerspec, sysinfo,
-//   sigevent, stack_t, itimerval, sigaction, fd_set, rlimit64, sockaddr, epoll_event, sigset_t,
-//   siginfo_t, mq_attr, timezone
-// }
-
 /// Use ptrace to inspect the process with the given pid and return the inspection result.
 pub(crate) trait InspectFromPid {
   fn inspect_from(pid: Pid, address: AddressType) -> Self;
@@ -395,12 +383,6 @@ where
 impl InspectFromPid for InspectResult<PathBuf> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     read_pathbuf(pid, address)
-  }
-}
-
-impl InspectFromPid for InspectResult<Arc<statmount>> {
-  fn inspect_from(pid: Pid, address: AddressType) -> Self {
-    todo!()
   }
 }
 

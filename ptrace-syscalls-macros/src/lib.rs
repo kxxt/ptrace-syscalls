@@ -5,8 +5,7 @@ use proc_macro_crate::{crate_name, FoundCrate};
 use quote::{format_ident, quote, quote_spanned, ToTokens};
 use syn::{
   braced, bracketed, parenthesized, parse::Parse, parse_macro_input, punctuated::Punctuated,
-  spanned::Spanned, token, Expr,  GenericArgument, Ident, PathArguments, Token, Type,
-  
+  spanned::Spanned, token, Expr, GenericArgument, Ident, PathArguments, Token, Type,
 };
 
 #[allow(dead_code)]
@@ -271,8 +270,7 @@ fn gen_syscall_args_struct(
     let arg_name = &arg.ident;
     arg_names.push(arg_name.clone());
     let arg_type = &arg.ty;
-    let (wrapped_arg_type, need_memory_inspection) =
-      wrap_syscall_arg_type(arg_type, span);
+    let (wrapped_arg_type, need_memory_inspection) = wrap_syscall_arg_type(arg_type, span);
     wrapped_arg_types.push(wrapped_arg_type.clone());
     if !need_memory_inspection {
       let inspect = quote_spanned! { span =>
@@ -330,8 +328,7 @@ fn gen_syscall_args_struct(
         #arg_name: Err(InspectError::SyscallFailure)
       });
       let arg_type = &modified_arg.ty;
-      let (wrapped_arg_type, need_memory_inspection) =
-        wrap_syscall_arg_type(arg_type, span);
+      let (wrapped_arg_type, need_memory_inspection) = wrap_syscall_arg_type(arg_type, span);
       modified_arg_types.push(wrapped_arg_type.clone());
       if !need_memory_inspection {
         let inspect = quote_spanned! { span =>
@@ -733,10 +730,7 @@ fn get_crate(name: &str) -> proc_macro2::TokenStream {
 }
 
 /// returns: (wrapped type, needs memory inspection)
-fn wrap_syscall_arg_type(
-  ty: &Type,
-  span: Span,
-) -> (proc_macro2::TokenStream, bool) {
+fn wrap_syscall_arg_type(ty: &Type, span: Span) -> (proc_macro2::TokenStream, bool) {
   match ty {
     Type::Array(ty) => {
       let element_ty = &ty.elem;
