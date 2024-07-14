@@ -107,9 +107,8 @@ gen_syscalls! {
   chroot(path: *const c_char) / { path: PathBuf } -> c_int ~ [File] for [x86_64: 161, aarch64: 51, riscv64: 51],
   clock_adjtime(clk_id: clockid_t, buf: *mut timex) / { clk_id: clockid_t, buf: timex } -> c_int ~ [Clock] for [x86_64: 305, aarch64: 266, riscv64: 266],
   // clock_adjtime64
-  // TODO: sysexit:res should be Option<timespec>
   clock_getres(clk_id: clockid_t, res: *mut timespec) / { clk_id: clockid_t }
-    -> c_int + { res: timespec } ~ [Clock] for [x86_64: 229, aarch64: 114, riscv64: 114],
+    -> c_int + { res: Option<timespec> } ~ [Clock] for [x86_64: 229, aarch64: 114, riscv64: 114],
   // clock_getres_time64
   clock_gettime(clk_id: clockid_t, tp: *mut timespec) / { clk_id: clockid_t }
     -> c_int + { tp: timespec } ~ [Clock] for [x86_64: 228, aarch64: 113, riscv64: 113],
