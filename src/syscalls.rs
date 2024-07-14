@@ -82,7 +82,7 @@ gen_syscalls! {
   adjtimex(buf: *mut timex) / { buf: timex } -> c_int ~ [Clock] for [x86_64: 159, aarch64: 171, riscv64: 171],
   alarm(seconds: c_uint) / { seconds: c_uint } -> c_uint ~ [] for [x86_64: 37],
   // arc_gettls, arc_settls, arc_usr_cmpxchg
-  arch_prctl(code: c_int, addr: c_ulong) / { code: c_int, addr: c_ulong } -> c_int ~ [] for [x86_64: 158], // TODO: addr can be a ptr
+  arch_prctl(code: c_int, addr: c_ulong) / {} -> c_int ~ [] for [x86_64: 158], // TODO: addr can be a ptr
   // arm_fadvise64_64, atomic_barrier, atomic_barrier
   bind(socketfd: RawFd, addr: *const sockaddr, addrlen: socklen_t) /
     { socketfd: RawFd, addr: sockaddr, addrlen: socklen_t } -> c_int ~ [Network] for [x86_64: 49, aarch64: 200, riscv64: 200],
