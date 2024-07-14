@@ -493,12 +493,11 @@ gen_syscalls! {
   msgctl(msqid: c_int, cmd: c_int, buf: *mut msqid_ds) / { msqid: c_int, cmd: c_int } -> c_int + { buf: msqid_ds }
     ~ [] for [x86_64: 71, aarch64: 187, riscv64: 187],
   msgget(key: key_t, msgflg: c_int) / { key: key_t, msgflg: c_int } -> c_int ~ [] for [x86_64: 68, aarch64: 186, riscv64: 186],
-  // TODO: msgp is a ptr to DST msgbuf { long mtype; char mtext[msgsz]; }
   msgrcv(msqid: c_int, msgp: *mut c_void, msgsz: size_t, msgtyp: c_long, msgflg: c_int) /
-    { msqid: c_int, msgsz: size_t, msgtyp: c_long, msgflg: c_int } -> ssize_t + { msgp: Vec<u8> @ counted_by(syscall_result) }
+    { msqid: c_int, msgsz: size_t, msgtyp: c_long, msgflg: c_int } -> ssize_t + { msgp: Arc<msgbuf> @ sized_by(size_of::<c_long>() + syscall_result as usize) }
     ~ [] for [x86_64: 70, aarch64: 188, riscv64: 188],
   msgsnd(msqid: c_int, msgp: *const c_void, msgsz: size_t, msgflg: c_int) /
-    { msqid: c_int, msgp: Vec<u8> @ counted_by(raw_args.msgsz), msgflg: c_int } -> c_int ~ [] for [x86_64: 69, aarch64: 189, riscv64: 189],
+    { msqid: c_int, msgp: Arc<msgbuf> @ sized_by(size_of::<c_long>() + raw_args.msgsz as usize), msgflg: c_int } -> c_int ~ [] for [x86_64: 69, aarch64: 189, riscv64: 189],
   msync(addr: *mut c_void, length: size_t, flags: c_int) / { addr: AddressType, length: size_t, flags: c_int } -> c_int
     ~ [Memory] for [x86_64: 26, aarch64: 227, riscv64: 227],
   // multiplexer

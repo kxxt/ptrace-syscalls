@@ -3,11 +3,14 @@ use std::{alloc::Layout, sync::Arc};
 use crate::{
   read_remote_memory, AddressType, InspectDynSizedFromPid, InspectError, InspectResult, Pid,
 };
-use nix::{errno::Errno, libc::c_char};
+use nix::{
+  errno::Errno,
+  libc::{c_char, c_long},
+};
 use slice_dst::{SliceDst, TryAllocSliceDst};
 
 macro_rules! impl_slice_dst {
-  ($($t:ty => $other:literal @ $a:literal),*) => {
+  ($($t:ty => $other:expr, $a:expr),*) => {
     $(
       unsafe impl SliceDst for $t {
         fn layout_for(len: usize) -> std::alloc::Layout {
@@ -43,8 +46,9 @@ macro_rules! impl_slice_dst {
 }
 
 impl_slice_dst! {
-  rseq => 32 @ 32,
-  statmount => 520 @ 8
+  rseq => 32, 32,
+  statmount => 520, 8,
+  msgbuf => std::mem::size_of::<c_long>(), std::mem::align_of::<c_long>()
 }
 
 #[derive(Debug, PartialEq)]
@@ -84,4 +88,11 @@ pub struct statmount {
   pub mnt_point: u32,
   pub __spare2: [u64; 50],
   pub str: [c_char],
+}
+
+#[derive(Debug, PartialEq)]
+#[repr(C)]
+pub struct msgbuf {
+  pub mtype: c_long,
+  pub mtext: [c_char],
 }

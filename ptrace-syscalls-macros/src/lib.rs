@@ -850,7 +850,7 @@ fn wrap_syscall_arg_type(ty: &Type, span: Span) -> (proc_macro2::TokenStream, bo
             };
             let arg = arg.args.to_token_stream().to_string();
             match arg.as_str() {
-              "rseq" | "statmount" => (quote_spanned!(span => InspectResult<#ty>), true),
+              "rseq" | "statmount" | "msgbuf" => (quote_spanned!(span => InspectResult<#ty>), true),
               _ => panic!("Unsupported inner syscall arg type: {:?}", arg),
             }
           } else {
