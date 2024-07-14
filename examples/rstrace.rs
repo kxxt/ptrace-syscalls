@@ -11,7 +11,7 @@ use nix::{
   unistd::{execvp, fork, getpid, setpgid, ForkResult, Pid},
 };
 
-use ptrace_syscalls::{ptrace_getregs, SyscallRawArgs, SyscallStopInspect};
+use ptrace_syscalls::{ptrace_getregs, SyscallModifiedArgs, SyscallRawArgs, SyscallStopInspect};
 
 fn ptrace_syscall(child: Pid, sig: Option<Signal>) -> Result<(), Errno> {
   match ptrace::syscall(child, sig) {
@@ -73,6 +73,7 @@ fn main() -> Result<(), Box<dyn Error>> {
   ptrace::syscall(child, None)?;
   let mut counter: usize = 0;
   let mut raw_args: Option<SyscallRawArgs> = None;
+  let mut is_last_exec_successful = false;
   loop {
     let status = waitpid(None, Some(WaitPidFlag::__WALL))?;
     match status {
@@ -90,7 +91,7 @@ fn main() -> Result<(), Box<dyn Error>> {
       }
       WaitStatus::PtraceEvent(pid, sig, evt) => match evt {
         PTRACE_EVENT_EXEC => {
-          eprintln!("exec: TODO");
+          is_last_exec_successful = true;
           ptrace_syscall(child, None)?;
         }
         _ => ptrace_syscall(child, None)?,
@@ -99,7 +100,23 @@ fn main() -> Result<(), Box<dyn Error>> {
         if let Some(raw) = raw_args {
           // syscall-exit-stop
           let regs = ptrace_getregs(pid)?;
-          let modified_args = raw.inspect_sysexit(pid, &regs);
+          let mut modified_args = raw.inspect_sysexit(pid, &regs);
+          // Fix the result of exec syscalls
+          match &mut modified_args {
+            SyscallModifiedArgs::Execve(info) => {
+              if is_last_exec_successful {
+                info.syscall_result = 0;
+                is_last_exec_successful = false;
+              }
+            }
+            SyscallModifiedArgs::Execveat(info) => {
+              if is_last_exec_successful {
+                info.syscall_result = 0;
+                is_last_exec_successful = false;
+              }
+            }
+            _ => (),
+          }
           eprintln!("{counter} syscall-exit : {:?}", modified_args);
           counter += 1;
           raw_args = None;
