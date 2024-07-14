@@ -278,8 +278,6 @@ pub(crate) trait InspectDynSizedFromPid {
   fn inspect_from(pid: Pid, address: AddressType, size: usize) -> Self;
 }
 
-// TODO: impl process_vm_read and ptrace read
-// https://android.googlesource.com/platform/system/core/+/android-9.0.0_r16/libunwindstack/Memory.cpp
 const WORD_SIZE: usize = size_of::<c_long>();
 
 impl<T: Clone + PartialEq + ReprCMarker> InspectFromPid for InspectResult<T> {
