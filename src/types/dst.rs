@@ -46,7 +46,7 @@ macro_rules! impl_slice_dst {
 }
 
 impl_slice_dst! {
-  rseq => 32, 32,
+  rseq => 28, 32,
   statmount => 520, 8,
   msgbuf => std::mem::size_of::<c_long>(), std::mem::align_of::<c_long>()
 }
