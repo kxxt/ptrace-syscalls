@@ -46,6 +46,7 @@ impl Decoder {
     let (target_trait, is_result) = match func.to_string().as_str() {
       "sized_by" => (format_ident!("InspectDynSizedFromPid"), false),
       "counted_by" => (format_ident!("InspectCountedFromPid"), false),
+      "sized_by_result" => (format_ident!("InspectDynSizedFromPid"), true),
       "counted_by_result" => (format_ident!("InspectCountedFromPid"), true),
       _ => panic!("Unsupported decoder function: {:?}", func),
     };
@@ -850,7 +851,7 @@ fn wrap_syscall_arg_type(ty: &Type, span: Span) -> (proc_macro2::TokenStream, bo
             };
             let arg = arg.args.to_token_stream().to_string();
             match arg.as_str() {
-              "rseq" | "statmount" | "msgbuf" => (quote_spanned!(span => InspectResult<#ty>), true),
+              "rseq" | "statmount" | "msgbuf" | "file_handle" => (quote_spanned!(span => InspectResult<#ty>), true),
               _ => panic!("Unsupported inner syscall arg type: {:?}", arg),
             }
           } else {

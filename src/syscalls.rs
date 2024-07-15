@@ -508,7 +508,9 @@ gen_syscalls! {
   munmap(addr: *mut c_void, length: size_t) / { addr: AddressType, length: size_t } -> c_int ~ [Memory] for [x86_64: 11, aarch64: 215, riscv64: 215],
   // TODO: DST file_handle
   name_to_handle_at(dirfd: RawFd, pathname: *const c_char, handle: *mut c_void, mount_id: *mut c_int, flags: c_int) /
-    { dirfd: RawFd, pathname: PathBuf, flags: c_int } -> c_int + { handle: Vec<u8> @ counted_by(todo!()), mount_id: InspectResult<c_int> }
+    { dirfd: RawFd, pathname: PathBuf, flags: c_int } -> c_int + 
+    { handle: Arc<file_handle> @ sized_by_result(<InspectResult<c_uint> as InspectFromPid>::inspect_from(inspectee_pid, raw_args.handle as AddressType)),
+      mount_id: InspectResult<c_int> }
     ~ [Desc, File] for [x86_64: 303, aarch64: 264, riscv64: 264],
   nanosleep(req: *const timespec, rem: *mut timespec) / { req: timespec } -> c_int + { rem: Option<timespec> }
     ~ [Clock] for [x86_64: 35, aarch64: 101, riscv64: 101],
@@ -527,7 +529,10 @@ gen_syscalls! {
     ~ [Desc, File] for [x86_64: 2, aarch64: 56, riscv64: 56],
   // open_by_handle_at: TODO: DST
   open_by_handle_at(mount_fd: RawFd, handle: *mut c_void, flags: c_int) /
-    { mount_fd: RawFd, handle: Vec<u8> @ counted_by(todo!()), flags: c_int } -> RawFd ~ [Desc] for [x86_64: 304, aarch64: 265, riscv64: 265],
+    { mount_fd: RawFd, 
+      handle: Arc<file_handle> @ sized_by_result(<InspectResult<c_uint> as InspectFromPid>::inspect_from(inspectee_pid, raw_args.handle as AddressType)),
+      flags: c_int }
+    -> RawFd ~ [Desc] for [x86_64: 304, aarch64: 265, riscv64: 265],
   open_tree(dirfd: RawFd, path: *const c_char, flags: c_uint) / { dirfd: RawFd, path: PathBuf, flags: c_uint } -> c_int
     ~ [Desc, File] for [x86_64: 428, aarch64: 428, riscv64: 428],
   openat(dirfd: RawFd, pathname: *const c_char, flags: c_int, mode: mode_t) /

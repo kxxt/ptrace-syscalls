@@ -5,7 +5,7 @@ use crate::{
 };
 use nix::{
   errno::Errno,
-  libc::{c_char, c_long},
+  libc::{c_char, c_long, c_int, c_uint},
 };
 use slice_dst::{SliceDst, TryAllocSliceDst};
 
@@ -48,7 +48,8 @@ macro_rules! impl_slice_dst {
 impl_slice_dst! {
   rseq => 28, 32,
   statmount => 520, 8,
-  msgbuf => std::mem::size_of::<c_long>(), std::mem::align_of::<c_long>()
+  msgbuf => std::mem::size_of::<c_long>(), std::mem::align_of::<c_long>(),
+  file_handle => 8, 4
 }
 
 #[derive(Debug, PartialEq)]
@@ -95,4 +96,12 @@ pub struct statmount {
 pub struct msgbuf {
   pub mtype: c_long,
   pub mtext: [c_char],
+}
+
+#[derive(Debug, PartialEq)]
+#[repr(C)]
+pub struct file_handle {
+  pub handle_bytes: c_uint,
+  pub handle_type: c_int,
+  pub f_handle: [c_char],
 }
