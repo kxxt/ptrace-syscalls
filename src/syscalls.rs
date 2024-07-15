@@ -252,7 +252,7 @@ gen_syscalls! {
   get_mempolicy(mode: *mut c_int, nodemask: *mut c_ulong, maxnode: c_ulong, addr: AddressType, flags: c_ulong) /
     { maxnode: c_ulong, addr: AddressType, flags: c_ulong }
     -> c_long + { mode: InspectResult<Option<c_int>>,
-      nodemask: Option<Vec<c_ulong>> @ counted_by(raw_args.maxnode as usize + (8 * std::mem::size_of::<c_ulong>() - 1) / std::mem::size_of::<c_ulong>()) }
+      nodemask: Option<Vec<c_ulong>> @ counted_by((raw_args.maxnode as usize + (8 * std::mem::size_of::<c_ulong>() - 1)) / (8 * std::mem::size_of::<c_ulong>())) }
     ~ [Memory] for [x86_64: 239, aarch64: 236, riscv64: 236],
   get_robust_list(pid: pid_t, head_ptr: *mut *mut robust_list_head, len_ptr: *mut size_t) /
     { pid: pid_t, head_ptr: InspectResult<AddressType>, len_ptr: size_t } -> c_long ~ [] for [x86_64: 274, aarch64: 100, riscv64: 100],
@@ -416,7 +416,7 @@ gen_syscalls! {
     ~ [Memory] for [x86_64: 453, aarch64: 453, riscv64: 453],
   mbind(addr: *mut c_void, len: c_ulong, mode: c_int, nodemask: *const c_ulong, maxnode: c_ulong, flags: c_uint) /
     { len: c_ulong, mode: c_int,
-       nodemask: Vec<c_ulong> @ counted_by(raw_args.maxnode as usize + (8 * std::mem::size_of::<c_ulong>() - 1) / std::mem::size_of::<c_ulong>()),
+       nodemask: Vec<c_ulong> @ counted_by((raw_args.maxnode as usize + (8 * std::mem::size_of::<c_ulong>() - 1)) / (8 * std::mem::size_of::<c_ulong>())),
        maxnode: c_ulong, flags: c_uint } -> c_long
     ~ [Memory] for [x86_64: 237, aarch64: 235, riscv64: 235],
   membarrier(cmd: c_int, flags: c_uint, cpu_id: c_int) / { cmd: c_int, flags: c_int, cpu_id: c_int } -> c_int
@@ -427,7 +427,9 @@ gen_syscalls! {
   // memory_ordering
   // migrate_pages: TODO: what's the size of the Vec
   migrate_pages(pid: pid_t, maxnode: c_ulong, old_nodes: *const c_ulong, new_nodes: *const c_ulong) /
-    { pid: pid_t, maxnode: c_ulong, old_nodes: Vec<c_ulong> @ counted_by(todo!()), new_nodes: Vec<c_ulong> @ counted_by(todo!()) }
+    { pid: pid_t, maxnode: c_ulong,
+      old_nodes: Vec<c_ulong> @ counted_by((raw_args.maxnode as usize + (8 * std::mem::size_of::<c_ulong>() - 1)) / (8 * std::mem::size_of::<c_ulong>())),
+      new_nodes: Vec<c_ulong> @ counted_by((raw_args.maxnode as usize + (8 * std::mem::size_of::<c_ulong>() - 1)) / (8 * std::mem::size_of::<c_ulong>())) }
     -> c_long ~ [Memory] for [x86_64: 256, aarch64: 238, riscv64: 238],
   // mincore: vec is at least of len (length+PAGE_SIZE-1) / PAGE_SIZE, where PAGE_SIZE is sysconf(_SC_PAGESIZE)
   mincore(addr: *mut c_void, length: size_t, vec: *mut c_uchar) / { addr: AddressType, length: size_t } -> c_int + { vec: Vec<c_uchar> }
@@ -739,7 +741,7 @@ gen_syscalls! {
     ~ [Network] for [x86_64: 44, aarch64: 206, riscv64: 206],
   set_mempolicy(mode: c_int, nodemask: *const c_ulong, maxnode: c_ulong) /
     { mode: c_int,
-      nodemask: Vec<c_ulong> @ counted_by( raw_args.maxnode as usize + (8 * std::mem::size_of::<c_ulong>() - 1) / std::mem::size_of::<c_ulong>() ),
+      nodemask: Vec<c_ulong> @ counted_by((raw_args.maxnode as usize + (8 * std::mem::size_of::<c_ulong>() - 1)) / (8 * std::mem::size_of::<c_ulong>())),
       maxnode: c_ulong }
      -> c_int ~ [Memory] for [x86_64: 238, aarch64: 237, riscv64: 237],
   set_mempolicy_home_node(start: c_ulong, len: c_ulong, home_mode: c_ulong, flags: c_ulong) /
