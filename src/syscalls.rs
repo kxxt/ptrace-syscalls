@@ -425,7 +425,6 @@ gen_syscalls! {
     ~ [Desc] for [x86_64: 319, aarch64: 279, riscv64: 279],
   memfd_secret(flags: c_uint) / { flags: c_uint } -> RawFd ~ [Desc] for [x86_64: 447, aarch64: 447, riscv64: 447],
   // memory_ordering
-  // migrate_pages: TODO: what's the size of the Vec
   migrate_pages(pid: pid_t, maxnode: c_ulong, old_nodes: *const c_ulong, new_nodes: *const c_ulong) /
     { pid: pid_t, maxnode: c_ulong,
       old_nodes: Vec<c_ulong> @ counted_by((raw_args.maxnode as usize + (8 * std::mem::size_of::<c_ulong>() - 1)) / (8 * std::mem::size_of::<c_ulong>())),
@@ -506,7 +505,6 @@ gen_syscalls! {
   munlock(addr: *const c_void, len: size_t) / { addr: AddressType, len: size_t } -> c_int ~ [Memory] for [x86_64: 150, aarch64: 229, riscv64: 229],
   munlockall() / {} -> c_int ~ [Memory] for [x86_64: 152, aarch64: 231, riscv64: 231],
   munmap(addr: *mut c_void, length: size_t) / { addr: AddressType, length: size_t } -> c_int ~ [Memory] for [x86_64: 11, aarch64: 215, riscv64: 215],
-  // TODO: DST file_handle
   name_to_handle_at(dirfd: RawFd, pathname: *const c_char, handle: *mut c_void, mount_id: *mut c_int, flags: c_int) /
     { dirfd: RawFd, pathname: PathBuf, flags: c_int } -> c_int + 
     { handle: Arc<file_handle> @ sized_by_result(<InspectResult<c_uint> as InspectFromPid>::inspect_from(inspectee_pid, raw_args.handle as AddressType)),
@@ -527,7 +525,6 @@ gen_syscalls! {
   // olduname
   open(pathname: *const c_char, flags: c_int, mode: mode_t) / { pathname: PathBuf, flags: c_int, mode: mode_t } -> RawFd
     ~ [Desc, File] for [x86_64: 2, aarch64: 56, riscv64: 56],
-  // open_by_handle_at: TODO: DST
   open_by_handle_at(mount_fd: RawFd, handle: *mut c_void, flags: c_int) /
     { mount_fd: RawFd, 
       handle: Arc<file_handle> @ sized_by_result(<InspectResult<c_uint> as InspectFromPid>::inspect_from(inspectee_pid, raw_args.handle as AddressType)),
