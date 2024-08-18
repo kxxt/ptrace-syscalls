@@ -655,7 +655,9 @@ gen_syscalls! {
     ~ [Memory] for [riscv64: 259],
   // https://docs.kernel.org/6.5/riscv/hwprobe.html
   riscv_hwprobe(pairs: *mut riscv_hwprobe, pair_count: size_t, cpu_count: size_t, cpus: *mut c_ulong, flags: c_uint) /
-    { pairs: Vec<riscv_hwprobe>, pair_count: size_t, cpu_count: size_t, cpus: Vec<c_ulong>, flags: c_uint }
+    { pairs: Vec<riscv_hwprobe> @ counted_by(raw_args.pair_count), pair_count: size_t, cpu_count: size_t,
+      cpus: Vec<c_ulong> @ counted_by((raw_args.cpu_count as usize + (8 * std::mem::size_of::<c_ulong>() - 1)) / (8 * std::mem::size_of::<c_ulong>())), 
+      flags: c_uint }
     -> c_int + { pairs: Vec<riscv_hwprobe> @ counted_by(raw_args.pair_count) }
     ~ [] for [riscv64: 258],
   rmdir(pathname: *const c_char) / { pathname: PathBuf } -> c_int ~ [File] for [x86_64: 84],
