@@ -162,8 +162,8 @@ gen_syscalls! {
   // epoll_wait_old(epfd: RawFd, events: *mut epoll_event, maxevents: c_int, timeout: c_int) /
   //   { epfd: RawFd, maxevents: c_int, timeout: c_int }
   //   -> c_int + { events: Vec<epoll_event> } for [x86_64: 215],
-  eventfd(initval: c_uint) / { initval: c_uint } -> c_int ~ [Desc] for [x86_64: 284],
-  eventfd2(initval: c_uint, flags: c_int) / { initval: c_uint, flags: c_int } -> c_int ~ [Desc] for [x86_64: 290, aarch64: 19, riscv64: 19],
+  eventfd(initval: c_uint) / { initval: c_uint } -> RawFd ~ [Desc] for [x86_64: 284],
+  eventfd2(initval: c_uint, flags: c_int) / { initval: c_uint, flags: c_int } -> RawFd ~ [Desc] for [x86_64: 290, aarch64: 19, riscv64: 19],
   // exec_with_loader, execv
   execve(filename: *const c_char, argv: *const *const c_char, envp: *const *const c_char) /
     { filename: PathBuf, argv: Option<Vec<CString>>, envp: Option<Vec<CString>> } -> c_int
@@ -184,7 +184,7 @@ gen_syscalls! {
   fallocate(fd: RawFd, mode: c_int, offset: off_t, len: off_t) /
     { fd: RawFd, mode: c_int, offset: off_t, len: off_t } -> c_int ~ [Desc] for [x86_64: 285, aarch64: 47, riscv64: 47],
   fanotify_init(flags: c_uint, event_f_flags: c_uint) /
-    { flags: c_uint, event_f_flags: c_uint } -> c_int ~ [Desc] for [x86_64: 300, aarch64: 262, riscv64: 262],
+    { flags: c_uint, event_f_flags: c_uint } -> RawFd ~ [Desc] for [x86_64: 300, aarch64: 262, riscv64: 262],
   fanotify_mark(fanotify_fd: RawFd, flags: c_uint, mask: u64, dirfd: RawFd, pathname: *const c_char) /
     { fanotify_fd: RawFd, flags: c_uint, mask: u64, dirfd: RawFd, pathname: Option<PathBuf> } -> c_int ~ [Desc, File] for [x86_64: 301, aarch64: 263, riscv64: 263],
   fchdir(fd: RawFd) / { fd: RawFd } -> c_int ~ [Desc] for [x86_64: 81, aarch64: 50, riscv64: 50],
