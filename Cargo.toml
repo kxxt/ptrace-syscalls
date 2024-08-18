@@ -26,4 +26,5 @@ slice-dst = "1.5.1"
 ptrace-syscalls-macros = { version = "0.0.0-experimental.2", path = "./ptrace-syscalls-macros" }
 
 [dev-dependencies]
+owo-colors = { version = "4.0.0", package="kxxt-owo-colors" }
 nix = { version = "0.29.0", features = ["process", "ptrace", "signal"] }

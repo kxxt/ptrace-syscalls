@@ -103,6 +103,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "kxxt-owo-colors"
+version = "4.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a8dd1b0a995850c0e39092fba2ea921ca78b1fb53b058a33f2aa734b135c0b7a"
+dependencies = [
+ "cfg-if",
+]
+
+[[package]]
 name = "libc"
 version = "0.2.156"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -163,6 +172,7 @@ dependencies = [
  "cfg-if",
  "enumflags2",
  "itertools",
+ "kxxt-owo-colors",
  "nix",
  "once_cell",
  "paste",
