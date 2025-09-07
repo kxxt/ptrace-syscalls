@@ -8,9 +8,7 @@ pub use dst::*;
 
 use std::ffi::c_void;
 
-use nix::libc::{
-  c_char, c_int, c_long, c_uint, c_ulong, c_ushort, ino64_t, off64_t, off_t, sigset_t, size_t,
-};
+use nix::libc::{c_char, c_int, c_long, c_uint, c_ulong, c_ushort, ino64_t, off64_t, off_t, sigset_t, size_t};
 
 pub type key_serial_t = i32; // https://github.com/Distrotech/keyutils/blob/9d52b8ab86931fb5a66fa5b567ea01875f31016e/keyutils.h#L22
 
@@ -195,15 +193,6 @@ pub struct __mount_arg {
 //   ctx_len: u64,
 //   ctx: [u8; ctx_len],
 // }
-
-#[derive(Debug, Clone, PartialEq)]
-#[repr(C)]
-pub struct mount_attr {
-  pub attr_set: u64,
-  pub attr_clr: u64,
-  pub propagation: u64,
-  pub userns_fd: u64,
-}
 
 pub type qid_t = c_uint;
 

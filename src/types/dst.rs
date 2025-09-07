@@ -1,11 +1,9 @@
 use std::{alloc::Layout, sync::Arc};
 
-use crate::{
-  read_remote_memory, AddressType, InspectDynSizedFromPid, InspectError, InspectResult, Pid,
-};
+use crate::{read_remote_memory, AddressType, InspectDynSizedFromPid, InspectError, InspectResult, Pid};
 use nix::{
   errno::Errno,
-  libc::{c_char, c_long, c_int, c_uint},
+  libc::{c_char, c_int, c_long, c_uint},
 };
 use slice_dst::{SliceDst, TryAllocSliceDst};
 
@@ -49,7 +47,9 @@ impl_slice_dst! {
   rseq => 28, 32,
   statmount => 520, 8,
   msgbuf => std::mem::size_of::<c_long>(), std::mem::align_of::<c_long>(),
-  file_handle => 8, 4
+  file_handle => 8, 4,
+  xattr_args => 16, 8,
+  mount_attr => 32, 8
 }
 
 #[derive(Debug, PartialEq)]
@@ -104,4 +104,23 @@ pub struct file_handle {
   pub handle_bytes: c_uint,
   pub handle_type: c_int,
   pub f_handle: [c_char],
+}
+
+#[derive(Debug, PartialEq)]
+#[repr(C)]
+pub struct xattr_args {
+  pub value: u64,
+  pub size: u32,
+  pub flags: u32,
+  pub __trailer: [c_char],
+}
+
+#[derive(Debug, PartialEq)]
+#[repr(C)]
+pub struct mount_attr {
+  pub attr_set: u64,
+  pub attr_clr: u64,
+  pub propagation: u64,
+  pub userns_fd: u64,
+  pub __trailer: [c_char],
 }

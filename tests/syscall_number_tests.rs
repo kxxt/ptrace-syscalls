@@ -101,6 +101,7 @@ mod syscall_number_tests {
     assert_eq!(ptrace_syscalls::SYS_gettimeofday, 169);
     assert_eq!(ptrace_syscalls::SYS_getuid, 174);
     assert_eq!(ptrace_syscalls::SYS_getxattr, 8);
+    assert_eq!(ptrace_syscalls::SYS_getxattrat, 464);
     assert_eq!(ptrace_syscalls::SYS_init_module, 105);
     assert_eq!(ptrace_syscalls::SYS_inotify_add_watch, 27);
     assert_eq!(ptrace_syscalls::SYS_inotify_init1, 26);
@@ -128,12 +129,17 @@ mod syscall_number_tests {
     assert_eq!(ptrace_syscalls::SYS_lgetxattr, 9);
     assert_eq!(ptrace_syscalls::SYS_linkat, 37);
     assert_eq!(ptrace_syscalls::SYS_listen, 201);
+    assert_eq!(ptrace_syscalls::SYS_listmount, 458);
     assert_eq!(ptrace_syscalls::SYS_listxattr, 11);
+    assert_eq!(ptrace_syscalls::SYS_listxattrat, 465);
     assert_eq!(ptrace_syscalls::SYS_llistxattr, 12);
     assert_eq!(ptrace_syscalls::SYS_lookup_dcookie, 18);
     assert_eq!(ptrace_syscalls::SYS_lremovexattr, 15);
     assert_eq!(ptrace_syscalls::SYS_lseek, 62);
     assert_eq!(ptrace_syscalls::SYS_lsetxattr, 6);
+    assert_eq!(ptrace_syscalls::SYS_lsm_get_self_attr, 459);
+    assert_eq!(ptrace_syscalls::SYS_lsm_list_modules, 461);
+    assert_eq!(ptrace_syscalls::SYS_lsm_set_self_attr, 460);
     assert_eq!(ptrace_syscalls::SYS_madvise, 233);
     assert_eq!(ptrace_syscalls::SYS_map_shadow_stack, 453);
     assert_eq!(ptrace_syscalls::SYS_mbind, 235);
@@ -160,6 +166,7 @@ mod syscall_number_tests {
     assert_eq!(ptrace_syscalls::SYS_mq_timedsend, 182);
     assert_eq!(ptrace_syscalls::SYS_mq_unlink, 181);
     assert_eq!(ptrace_syscalls::SYS_mremap, 216);
+    assert_eq!(ptrace_syscalls::SYS_mseal, 462);
     assert_eq!(ptrace_syscalls::SYS_msgctl, 187);
     assert_eq!(ptrace_syscalls::SYS_msgget, 186);
     assert_eq!(ptrace_syscalls::SYS_msgrcv, 188);
@@ -173,6 +180,7 @@ mod syscall_number_tests {
     assert_eq!(ptrace_syscalls::SYS_newfstatat, 79);
     assert_eq!(ptrace_syscalls::SYS_open_by_handle_at, 265);
     assert_eq!(ptrace_syscalls::SYS_open_tree, 428);
+    assert_eq!(ptrace_syscalls::SYS_open_tree_attr, 467);
     assert_eq!(ptrace_syscalls::SYS_openat, 56);
     assert_eq!(ptrace_syscalls::SYS_openat2, 437);
     assert_eq!(ptrace_syscalls::SYS_perf_event_open, 241);
@@ -212,6 +220,7 @@ mod syscall_number_tests {
     assert_eq!(ptrace_syscalls::SYS_recvmsg, 212);
     assert_eq!(ptrace_syscalls::SYS_remap_file_pages, 234);
     assert_eq!(ptrace_syscalls::SYS_removexattr, 14);
+    assert_eq!(ptrace_syscalls::SYS_removexattrat, 466);
     assert_eq!(ptrace_syscalls::SYS_renameat2, 276);
     assert_eq!(ptrace_syscalls::SYS_request_key, 218);
     assert_eq!(ptrace_syscalls::SYS_restart_syscall, 128);
@@ -271,6 +280,7 @@ mod syscall_number_tests {
     assert_eq!(ptrace_syscalls::SYS_settimeofday, 170);
     assert_eq!(ptrace_syscalls::SYS_setuid, 146);
     assert_eq!(ptrace_syscalls::SYS_setxattr, 5);
+    assert_eq!(ptrace_syscalls::SYS_setxattrat, 463);
     assert_eq!(ptrace_syscalls::SYS_shmat, 196);
     assert_eq!(ptrace_syscalls::SYS_shmctl, 195);
     assert_eq!(ptrace_syscalls::SYS_shmdt, 197);
@@ -282,6 +292,7 @@ mod syscall_number_tests {
     assert_eq!(ptrace_syscalls::SYS_socketpair, 199);
     assert_eq!(ptrace_syscalls::SYS_splice, 76);
     assert_eq!(ptrace_syscalls::SYS_statfs, 43);
+    assert_eq!(ptrace_syscalls::SYS_statmount, 457);
     assert_eq!(ptrace_syscalls::SYS_statx, 291);
     assert_eq!(ptrace_syscalls::SYS_swapoff, 225);
     assert_eq!(ptrace_syscalls::SYS_swapon, 224);
@@ -433,6 +444,7 @@ mod syscall_number_tests {
     assert_eq!(ptrace_syscalls::SYS_gettimeofday, 96);
     assert_eq!(ptrace_syscalls::SYS_getuid, 102);
     assert_eq!(ptrace_syscalls::SYS_getxattr, 191);
+    assert_eq!(ptrace_syscalls::SYS_getxattrat, 464);
     assert_eq!(ptrace_syscalls::SYS_init_module, 175);
     assert_eq!(ptrace_syscalls::SYS_inotify_add_watch, 254);
     assert_eq!(ptrace_syscalls::SYS_inotify_init, 253);
@@ -465,12 +477,17 @@ mod syscall_number_tests {
     assert_eq!(ptrace_syscalls::SYS_link, 86);
     assert_eq!(ptrace_syscalls::SYS_linkat, 265);
     assert_eq!(ptrace_syscalls::SYS_listen, 50);
+    assert_eq!(ptrace_syscalls::SYS_listmount, 458);
     assert_eq!(ptrace_syscalls::SYS_listxattr, 194);
+    assert_eq!(ptrace_syscalls::SYS_listxattrat, 465);
     assert_eq!(ptrace_syscalls::SYS_llistxattr, 195);
     assert_eq!(ptrace_syscalls::SYS_lookup_dcookie, 212);
     assert_eq!(ptrace_syscalls::SYS_lremovexattr, 198);
     assert_eq!(ptrace_syscalls::SYS_lseek, 8);
     assert_eq!(ptrace_syscalls::SYS_lsetxattr, 189);
+    assert_eq!(ptrace_syscalls::SYS_lsm_get_self_attr, 459);
+    assert_eq!(ptrace_syscalls::SYS_lsm_list_modules, 461);
+    assert_eq!(ptrace_syscalls::SYS_lsm_set_self_attr, 460);
     assert_eq!(ptrace_syscalls::SYS_lstat, 6);
     assert_eq!(ptrace_syscalls::SYS_madvise, 28);
     assert_eq!(ptrace_syscalls::SYS_map_shadow_stack, 453);
@@ -501,6 +518,7 @@ mod syscall_number_tests {
     assert_eq!(ptrace_syscalls::SYS_mq_timedsend, 242);
     assert_eq!(ptrace_syscalls::SYS_mq_unlink, 241);
     assert_eq!(ptrace_syscalls::SYS_mremap, 25);
+    assert_eq!(ptrace_syscalls::SYS_mseal, 462);
     assert_eq!(ptrace_syscalls::SYS_msgctl, 71);
     assert_eq!(ptrace_syscalls::SYS_msgget, 68);
     assert_eq!(ptrace_syscalls::SYS_msgrcv, 70);
@@ -515,6 +533,7 @@ mod syscall_number_tests {
     assert_eq!(ptrace_syscalls::SYS_open, 2);
     assert_eq!(ptrace_syscalls::SYS_open_by_handle_at, 304);
     assert_eq!(ptrace_syscalls::SYS_open_tree, 428);
+    assert_eq!(ptrace_syscalls::SYS_open_tree_attr, 467);
     assert_eq!(ptrace_syscalls::SYS_openat, 257);
     assert_eq!(ptrace_syscalls::SYS_openat2, 437);
     assert_eq!(ptrace_syscalls::SYS_pause, 34);
@@ -558,6 +577,7 @@ mod syscall_number_tests {
     assert_eq!(ptrace_syscalls::SYS_recvmsg, 47);
     assert_eq!(ptrace_syscalls::SYS_remap_file_pages, 216);
     assert_eq!(ptrace_syscalls::SYS_removexattr, 197);
+    assert_eq!(ptrace_syscalls::SYS_removexattrat, 466);
     assert_eq!(ptrace_syscalls::SYS_rename, 82);
     assert_eq!(ptrace_syscalls::SYS_renameat, 264);
     assert_eq!(ptrace_syscalls::SYS_renameat2, 316);
@@ -620,6 +640,7 @@ mod syscall_number_tests {
     assert_eq!(ptrace_syscalls::SYS_settimeofday, 164);
     assert_eq!(ptrace_syscalls::SYS_setuid, 105);
     assert_eq!(ptrace_syscalls::SYS_setxattr, 188);
+    assert_eq!(ptrace_syscalls::SYS_setxattrat, 463);
     assert_eq!(ptrace_syscalls::SYS_shmat, 30);
     assert_eq!(ptrace_syscalls::SYS_shmctl, 31);
     assert_eq!(ptrace_syscalls::SYS_shmdt, 67);
@@ -633,6 +654,7 @@ mod syscall_number_tests {
     assert_eq!(ptrace_syscalls::SYS_splice, 275);
     assert_eq!(ptrace_syscalls::SYS_stat, 4);
     assert_eq!(ptrace_syscalls::SYS_statfs, 137);
+    assert_eq!(ptrace_syscalls::SYS_statmount, 457);
     assert_eq!(ptrace_syscalls::SYS_statx, 332);
     assert_eq!(ptrace_syscalls::SYS_swapoff, 168);
     assert_eq!(ptrace_syscalls::SYS_swapon, 167);
@@ -664,6 +686,7 @@ mod syscall_number_tests {
     assert_eq!(ptrace_syscalls::SYS_unlink, 87);
     assert_eq!(ptrace_syscalls::SYS_unlinkat, 263);
     assert_eq!(ptrace_syscalls::SYS_unshare, 272);
+    assert_eq!(ptrace_syscalls::SYS_uretprobe, 335);
     assert_eq!(ptrace_syscalls::SYS_userfaultfd, 323);
     assert_eq!(ptrace_syscalls::SYS_ustat, 136);
     assert_eq!(ptrace_syscalls::SYS_utime, 132);
@@ -777,6 +800,7 @@ mod syscall_number_tests {
     assert_eq!(ptrace_syscalls::SYS_gettimeofday, 169);
     assert_eq!(ptrace_syscalls::SYS_getuid, 174);
     assert_eq!(ptrace_syscalls::SYS_getxattr, 8);
+    assert_eq!(ptrace_syscalls::SYS_getxattrat, 464);
     assert_eq!(ptrace_syscalls::SYS_init_module, 105);
     assert_eq!(ptrace_syscalls::SYS_inotify_add_watch, 27);
     assert_eq!(ptrace_syscalls::SYS_inotify_init1, 26);
@@ -804,12 +828,17 @@ mod syscall_number_tests {
     assert_eq!(ptrace_syscalls::SYS_lgetxattr, 9);
     assert_eq!(ptrace_syscalls::SYS_linkat, 37);
     assert_eq!(ptrace_syscalls::SYS_listen, 201);
+    assert_eq!(ptrace_syscalls::SYS_listmount, 458);
     assert_eq!(ptrace_syscalls::SYS_listxattr, 11);
+    assert_eq!(ptrace_syscalls::SYS_listxattrat, 465);
     assert_eq!(ptrace_syscalls::SYS_llistxattr, 12);
     assert_eq!(ptrace_syscalls::SYS_lookup_dcookie, 18);
     assert_eq!(ptrace_syscalls::SYS_lremovexattr, 15);
     assert_eq!(ptrace_syscalls::SYS_lseek, 62);
     assert_eq!(ptrace_syscalls::SYS_lsetxattr, 6);
+    assert_eq!(ptrace_syscalls::SYS_lsm_get_self_attr, 459);
+    assert_eq!(ptrace_syscalls::SYS_lsm_list_modules, 461);
+    assert_eq!(ptrace_syscalls::SYS_lsm_set_self_attr, 460);
     assert_eq!(ptrace_syscalls::SYS_madvise, 233);
     assert_eq!(ptrace_syscalls::SYS_map_shadow_stack, 453);
     assert_eq!(ptrace_syscalls::SYS_mbind, 235);
@@ -836,6 +865,7 @@ mod syscall_number_tests {
     assert_eq!(ptrace_syscalls::SYS_mq_timedsend, 182);
     assert_eq!(ptrace_syscalls::SYS_mq_unlink, 181);
     assert_eq!(ptrace_syscalls::SYS_mremap, 216);
+    assert_eq!(ptrace_syscalls::SYS_mseal, 462);
     assert_eq!(ptrace_syscalls::SYS_msgctl, 187);
     assert_eq!(ptrace_syscalls::SYS_msgget, 186);
     assert_eq!(ptrace_syscalls::SYS_msgrcv, 188);
@@ -849,6 +879,7 @@ mod syscall_number_tests {
     assert_eq!(ptrace_syscalls::SYS_newfstatat, 79);
     assert_eq!(ptrace_syscalls::SYS_open_by_handle_at, 265);
     assert_eq!(ptrace_syscalls::SYS_open_tree, 428);
+    assert_eq!(ptrace_syscalls::SYS_open_tree_attr, 467);
     assert_eq!(ptrace_syscalls::SYS_openat, 56);
     assert_eq!(ptrace_syscalls::SYS_openat2, 437);
     assert_eq!(ptrace_syscalls::SYS_perf_event_open, 241);
@@ -888,6 +919,7 @@ mod syscall_number_tests {
     assert_eq!(ptrace_syscalls::SYS_recvmsg, 212);
     assert_eq!(ptrace_syscalls::SYS_remap_file_pages, 234);
     assert_eq!(ptrace_syscalls::SYS_removexattr, 14);
+    assert_eq!(ptrace_syscalls::SYS_removexattrat, 466);
     assert_eq!(ptrace_syscalls::SYS_renameat, 38);
     assert_eq!(ptrace_syscalls::SYS_renameat2, 276);
     assert_eq!(ptrace_syscalls::SYS_request_key, 218);
@@ -946,6 +978,7 @@ mod syscall_number_tests {
     assert_eq!(ptrace_syscalls::SYS_settimeofday, 170);
     assert_eq!(ptrace_syscalls::SYS_setuid, 146);
     assert_eq!(ptrace_syscalls::SYS_setxattr, 5);
+    assert_eq!(ptrace_syscalls::SYS_setxattrat, 463);
     assert_eq!(ptrace_syscalls::SYS_shmat, 196);
     assert_eq!(ptrace_syscalls::SYS_shmctl, 195);
     assert_eq!(ptrace_syscalls::SYS_shmdt, 197);
@@ -957,6 +990,7 @@ mod syscall_number_tests {
     assert_eq!(ptrace_syscalls::SYS_socketpair, 199);
     assert_eq!(ptrace_syscalls::SYS_splice, 76);
     assert_eq!(ptrace_syscalls::SYS_statfs, 43);
+    assert_eq!(ptrace_syscalls::SYS_statmount, 457);
     assert_eq!(ptrace_syscalls::SYS_statx, 291);
     assert_eq!(ptrace_syscalls::SYS_swapoff, 225);
     assert_eq!(ptrace_syscalls::SYS_swapon, 224);

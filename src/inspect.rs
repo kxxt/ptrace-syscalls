@@ -10,10 +10,10 @@ use std::{
 use nix::{
   errno::Errno,
   libc::{
-    c_long, c_ulong, clone_args, epoll_event, fd_set, iocb, iovec, itimerspec, itimerval, memcpy,
-    mmsghdr, mq_attr, msghdr, msqid_ds, open_how, pollfd, rlimit, rlimit64, rusage, sched_attr,
-    sched_param, sembuf, shmid_ds, sigaction, sigevent, siginfo_t, sigset_t, sockaddr, stack_t,
-    stat, statfs, statx, sysinfo, timespec, timeval, timex, tms, utimbuf, utsname,
+    c_long, c_ulong, clone_args, epoll_event, fd_set, iocb, iovec, itimerspec, itimerval, memcpy, mmsghdr, mq_attr,
+    msghdr, msqid_ds, open_how, pollfd, rlimit, rlimit64, rusage, sched_attr, sched_param, sembuf, shmid_ds, sigaction,
+    sigevent, siginfo_t, sigset_t, sockaddr, stack_t, stat, statfs, statx, sysinfo, timespec, timeval, timex, tms,
+    utimbuf, utsname,
   },
   sys::ptrace::{self, AddressType},
   unistd::{sysconf, Pid, SysconfVar},
@@ -23,9 +23,9 @@ use once_cell::sync::OnceCell;
 use crate::{
   arch::PtraceRegisters,
   types::{
-    __aio_sigset, __mount_arg, cachestat, cachestat_range, cap_user_data, cap_user_header,
-    futex_waitv, io_event, io_uring_params, kexec_segment, landlock_ruleset_attr, linux_dirent,
-    linux_dirent64, mnt_id_req, mount_attr, timezone, ustat,
+    __aio_sigset, __mount_arg, cachestat, cachestat_range, cap_user_data, cap_user_header, futex_waitv, io_event,
+    io_uring_params, kexec_segment, landlock_ruleset_attr, linux_dirent, linux_dirent64, mnt_id_req, mount_attr,
+    timezone, ustat,
   },
 };
 
@@ -116,11 +116,7 @@ unsafe fn read_by_ptrace_peek(
     let aligned_addr = ((remote_addr as usize) & (WORD_SIZE - 1).not()) as AddressType;
     let word = ptrace::read(pid, aligned_addr)?;
     let copy_len = len.min(remote_addr as usize - align_bytes);
-    memcpy(
-      dest,
-      (&word as *const c_long as *const c_void).byte_add(align_bytes),
-      copy_len,
-    );
+    memcpy(dest, (&word as *const c_long as *const c_void).byte_add(align_bytes), copy_len);
     remote_addr = remote_addr.byte_add(copy_len);
     len -= copy_len;
     total_read += copy_len;
@@ -214,19 +210,14 @@ pub enum InspectError<T: Clone + PartialEq> {
 pub type InspectResult<T> = Result<T, InspectError<T>>;
 
 impl<T: Clone + PartialEq> InspectError<T> {
-  pub fn map_ptrace_failure<U: Clone + PartialEq, F: FnOnce(T) -> U>(
-    self,
-    f: F,
-  ) -> InspectError<U> {
+  pub fn map_ptrace_failure<U: Clone + PartialEq, F: FnOnce(T) -> U>(self, f: F) -> InspectError<U> {
     match self {
       InspectError::SyscallFailure => InspectError::SyscallFailure,
       InspectError::ReadFailure { errno, incomplete } => InspectError::ReadFailure {
         errno,
         incomplete: incomplete.map(f),
       },
-      InspectError::DependencyInspectFailure { field } => {
-        InspectError::DependencyInspectFailure { field }
-      }
+      InspectError::DependencyInspectFailure { field } => InspectError::DependencyInspectFailure { field },
     }
   }
 }
@@ -284,15 +275,11 @@ impl<T: Clone + PartialEq + ReprCMarker> InspectFromPid for InspectResult<T> {
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     let mut buf = MaybeUninit::<T>::uninit();
     unsafe {
-      read_remote_memory(
-        pid,
-        address,
-        size_of::<T>(),
-        buf.as_mut_ptr() as AddressType,
-      )
-      .map_err(|errno| InspectError::ReadFailure {
-        errno,
-        incomplete: None,
+      read_remote_memory(pid, address, size_of::<T>(), buf.as_mut_ptr() as AddressType).map_err(|errno| {
+        InspectError::ReadFailure {
+          errno,
+          incomplete: None,
+        }
       })?;
       Ok(buf.assume_init())
     }
@@ -347,10 +334,7 @@ fn read_lossy_string(pid: Pid, address: AddressType) -> InspectResult<String> {
   read_generic_string(pid, address, |x| String::from_utf8_lossy(&x).into_owned())
 }
 
-fn read_null_ended_array<TItem: Clone + PartialEq>(
-  pid: Pid,
-  mut address: AddressType,
-) -> InspectResult<Vec<TItem>>
+fn read_null_ended_array<TItem: Clone + PartialEq>(pid: Pid, mut address: AddressType) -> InspectResult<Vec<TItem>>
 where
   InspectResult<TItem>: InspectFromPid,
 {
@@ -438,8 +422,7 @@ where
   fn inspect_from(pid: Pid, address: AddressType) -> Self {
     let item1 = InspectResult::<T>::inspect_from(pid, address)
       .map_err(|e| e.map_ptrace_failure(|incomplete| vec![incomplete]))?;
-    let item2 = match InspectResult::<T>::inspect_from(pid, unsafe { address.add(size_of::<T>()) })
-    {
+    let item2 = match InspectResult::<T>::inspect_from(pid, unsafe { address.add(size_of::<T>()) }) {
       Ok(t) => t,
       Err(e) => return Err(e.map_ptrace_failure(|incomplete| vec![item1, incomplete])),
     };
@@ -452,9 +435,7 @@ impl<T: Clone + PartialEq + ReprCMarker> InspectFromPid for InspectResult<Option
     if address.is_null() {
       Ok(None)
     } else {
-      Ok(Some(
-        InspectResult::<T>::inspect_from(pid, address).map_err(|e| e.map_ptrace_failure(Some))?,
-      ))
+      Ok(Some(InspectResult::<T>::inspect_from(pid, address).map_err(|e| e.map_ptrace_failure(Some))?))
     }
   }
 }

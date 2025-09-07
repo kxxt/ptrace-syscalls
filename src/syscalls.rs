@@ -10,19 +10,18 @@ use std::{
 use crate::{
   arch::{syscall_arg, syscall_no_from_regs, syscall_res_from_regs, PtraceRegisters},
   types::*,
-  InspectCountedFromPid, InspectDynSizedFromPid, InspectError, InspectFromPid, InspectResult,
-  SyscallNumber, SyscallStopInspect,
+  InspectCountedFromPid, InspectDynSizedFromPid, InspectError, InspectFromPid, InspectResult, SyscallNumber,
+  SyscallStopInspect,
 };
 use crate::{ptrace_getregs, SyscallGroups, SyscallGroupsGetter};
 use enumflags2::BitFlags;
 use nix::errno::Errno;
 use nix::libc::{
-  c_char, c_long, c_uchar, c_uint, c_ulong, c_void, clock_t, clockid_t, clone_args, dev_t,
-  epoll_event, fd_set, gid_t, id_t, idtype_t, iocb, iovec, itimerspec, itimerval, key_t, loff_t,
-  mmsghdr, mode_t, mq_attr, mqd_t, msghdr, msqid_ds, nfds_t, off_t, open_how, pid_t, pollfd,
-  rlimit, rlimit64, rusage, sched_attr, sched_param, sembuf, shmid_ds, sigaction, sigevent,
-  siginfo_t, sigset_t, size_t, sockaddr, socklen_t, ssize_t, stack_t, stat, statfs, statx, sysinfo,
-  time_t, timer_t, timespec, timeval, timex, tms, uid_t, utimbuf, utsname,
+  c_char, c_long, c_uchar, c_uint, c_ulong, c_void, clock_t, clockid_t, clone_args, dev_t, epoll_event, fd_set, gid_t,
+  id_t, idtype_t, iocb, iovec, itimerspec, itimerval, key_t, loff_t, mmsghdr, mode_t, mq_attr, mqd_t, msghdr, msqid_ds,
+  nfds_t, off_t, open_how, pid_t, pollfd, rlimit, rlimit64, rusage, sched_attr, sched_param, sembuf, shmid_ds,
+  sigaction, sigevent, siginfo_t, sigset_t, size_t, sockaddr, socklen_t, ssize_t, stack_t, stat, statfs, statx,
+  sysinfo, time_t, timer_t, timespec, timeval, timex, tms, uid_t, utimbuf, utsname,
 };
 use nix::sys::ptrace::AddressType;
 use nix::unistd::Pid;
@@ -316,6 +315,9 @@ gen_syscalls! {
   // getuid32
   getxattr(pathname: *const c_char, name: *const c_char, value: *mut c_void, size: size_t) /
     { pathname: PathBuf, name: CString, size: size_t } -> ssize_t + { value: Vec<u8> @ counted_by(syscall_result) } ~ [File] for [x86_64: 191, aarch64: 8, riscv64: 8],
+  // TODO: support result inspection (need to inspect args inside xattr_args)
+  getxattrat(dfd: RawFd, pathname: *const c_char, at_flags: c_uint, name: *const c_char, uargs: *mut c_void, r#usize: size_t) /
+    { dfd: RawFd, pathname: PathBuf, at_flags: c_uint, name: CString, uargs: Arc<xattr_args> @ sized_by(raw_args.r#usize) } -> ssize_t ~ [File, Desc] for [x86_64: 464, aarch64: 464, riscv64: 464],
   // getxgid
   // getxpid
   // getxuid
@@ -394,6 +396,9 @@ gen_syscalls! {
     { path: PathBuf, size: size_t } -> ssize_t + { list: Option<Vec<CString>> } ~ [File] for [x86_64: 194, aarch64: 11, riscv64: 11],
   llistxattr(path: *const c_char, list: *mut c_char, size: size_t) /
     { path: PathBuf, size: size_t } -> ssize_t + { list: Option<Vec<CString>> } ~ [File] for [x86_64: 195, aarch64: 12, riscv64: 12],
+  listxattrat(dfd: RawFd, pathname: *const c_char, at_flags: c_uint, list: *mut c_char, size: size_t) /
+    { dfd: RawFd, pathname: PathBuf, at_flags: c_uint, size: size_t } -> ssize_t + { list: Option<Vec<CString>> }
+    ~ [File, Desc] for [x86_64: 465, aarch64: 465, riscv64: 465],
   lookup_dcookie(cookie: u64, buffer: *mut c_char, len: size_t) /
     { cookie: u64, len: size_t } -> c_long + { buffer: PathBuf } ~ [] for [x86_64: 212, aarch64: 18, riscv64: 18],
   lremovexattr(path: *const c_char, name: *const c_char) / { path: PathBuf, name: CString } -> c_int ~ [File] for [x86_64: 198, aarch64: 15, riscv64: 15],
@@ -452,9 +457,8 @@ gen_syscalls! {
   mount(source: *const c_char, target: *const c_char, filesystemtype: *const c_char, mountflags: c_ulong, data: *const c_void) /
     { source: CString, target: PathBuf, filesystemtype: CString, mountflags: c_ulong, data: Option<CString> } -> c_int
     ~ [File] for [x86_64: 165, aarch64: 40, riscv64: 40],
-  // mount_setattr: TODO: the mount_attr struct is extensible
-  mount_setattr(dirfd: RawFd, pathname: *const c_char, flags: c_uint, attr: *mut mount_attr, size: size_t) /
-    { dirfd: RawFd, pathname: PathBuf, flags: c_uint, attr: Vec<mount_attr> @ counted_by(raw_args.size) } -> c_int
+  mount_setattr(dirfd: RawFd, pathname: *const c_char, flags: c_uint, uattr: *mut c_void, r#usize: size_t) /
+    { dirfd: RawFd, pathname: PathBuf, flags: c_uint, uattr: Arc<mount_attr> @ sized_by(raw_args.r#usize) } -> c_int
     ~ [Desc, File] for [x86_64: 442, aarch64: 442, riscv64: 442],
   move_mount(from_dfd: RawFd, from_path: *const c_char, to_dfd: RawFd, to_path: *const c_char, ms_flags: c_uint) /
     { from_dfd: RawFd, from_path: PathBuf, to_dfd: RawFd, to_path: PathBuf, ms_flags: c_uint } -> c_int
@@ -506,7 +510,7 @@ gen_syscalls! {
   munlockall() / {} -> c_int ~ [Memory] for [x86_64: 152, aarch64: 231, riscv64: 231],
   munmap(addr: *mut c_void, length: size_t) / { addr: AddressType, length: size_t } -> c_int ~ [Memory] for [x86_64: 11, aarch64: 215, riscv64: 215],
   name_to_handle_at(dirfd: RawFd, pathname: *const c_char, handle: *mut c_void, mount_id: *mut c_int, flags: c_int) /
-    { dirfd: RawFd, pathname: PathBuf, flags: c_int } -> c_int + 
+    { dirfd: RawFd, pathname: PathBuf, flags: c_int } -> c_int +
     { handle: Arc<file_handle> @ sized_by_result(<InspectResult<c_uint> as InspectFromPid>::inspect_from(inspectee_pid, raw_args.handle as AddressType)),
       mount_id: InspectResult<c_int> }
     ~ [Desc, File] for [x86_64: 303, aarch64: 264, riscv64: 264],
@@ -526,12 +530,15 @@ gen_syscalls! {
   open(pathname: *const c_char, flags: c_int, mode: mode_t) / { pathname: PathBuf, flags: c_int, mode: mode_t } -> RawFd
     ~ [Desc, File] for [x86_64: 2, aarch64: 56, riscv64: 56],
   open_by_handle_at(mount_fd: RawFd, handle: *mut c_void, flags: c_int) /
-    { mount_fd: RawFd, 
+    { mount_fd: RawFd,
       handle: Arc<file_handle> @ sized_by_result(<InspectResult<c_uint> as InspectFromPid>::inspect_from(inspectee_pid, raw_args.handle as AddressType)),
       flags: c_int }
     -> RawFd ~ [Desc] for [x86_64: 304, aarch64: 265, riscv64: 265],
   open_tree(dirfd: RawFd, path: *const c_char, flags: c_uint) / { dirfd: RawFd, path: PathBuf, flags: c_uint } -> c_int
     ~ [Desc, File] for [x86_64: 428, aarch64: 428, riscv64: 428],
+  open_tree_attr(dfd: RawFd, filename: *const c_char, flags: c_uint, uattr: *mut c_void, r#usize: size_t) /
+    { dfd: RawFd, filename: PathBuf, flags: c_uint, uattr: Arc<mount_attr> @ sized_by(raw_args.r#usize) } -> c_int
+    ~ [Desc, File] for [x86_64: 467, aarch64: 467, riscv64: 467],
   openat(dirfd: RawFd, pathname: *const c_char, flags: c_int, mode: mode_t) /
     { dirfd: RawFd, pathname: PathBuf, flags: c_int, mode: mode_t } -> RawFd ~ [Desc, File] for [x86_64: 257, aarch64: 56, riscv64: 56],
   openat2(dirfd: RawFd, pathname: *const c_char, how: *mut open_how, size: size_t) /
@@ -639,6 +646,9 @@ gen_syscalls! {
     ~ [Memory] for [x86_64: 216, aarch64: 234, riscv64: 234],
   removexattr(path: *const c_char, name: *const c_char) / { path: PathBuf, name: CString } -> c_int
     ~ [File] for [x86_64: 197, aarch64: 14, riscv64: 14],
+  removexattrat(dfd: RawFd, pathname: *const c_char, at_flags: c_uint, name: *const c_char) /
+    { dfd: RawFd, pathname: PathBuf, at_flags: c_uint, name: CString } -> c_int
+    ~ [File, Desc] for [x86_64: 466, aarch64: 466, riscv64: 466],
   rename(oldpath: *const c_char, newpath: *const c_char) / { oldpath: PathBuf, newpath: PathBuf } -> c_int
     ~ [File] for [x86_64: 82],
   renameat(olddirfd: RawFd, oldpath: *const c_char, newdirfd: RawFd, newpath: *const c_char) /
@@ -656,7 +666,7 @@ gen_syscalls! {
   // https://docs.kernel.org/6.5/riscv/hwprobe.html
   riscv_hwprobe(pairs: *mut riscv_hwprobe, pair_count: size_t, cpu_count: size_t, cpus: *mut c_ulong, flags: c_uint) /
     { pairs: Vec<riscv_hwprobe> @ counted_by(raw_args.pair_count), pair_count: size_t, cpu_count: size_t,
-      cpus: Vec<c_ulong> @ counted_by((raw_args.cpu_count as usize + (8 * std::mem::size_of::<c_ulong>() - 1)) / (8 * std::mem::size_of::<c_ulong>())), 
+      cpus: Vec<c_ulong> @ counted_by((raw_args.cpu_count as usize + (8 * std::mem::size_of::<c_ulong>() - 1)) / (8 * std::mem::size_of::<c_ulong>())),
       flags: c_uint }
     -> c_int + { pairs: Vec<riscv_hwprobe> @ counted_by(raw_args.pair_count) }
     ~ [] for [riscv64: 258],
@@ -800,6 +810,10 @@ gen_syscalls! {
   // setuid32
   setxattr(path: *const c_char, name: *const c_char, value: *const c_void, size: size_t, flags: c_int) /
     { path: PathBuf, name: CString, value: CString, size: size_t, flags: c_int } -> c_int ~ [File] for [x86_64: 188, aarch64: 5, riscv64: 5],
+  // TODO: same as getxattrat
+  setxattrat(dfd: RawFd, pathname: *const c_char, at_flags: c_uint, name: *const c_char, uargs: *const c_void, r#usize: size_t) /
+    { dfd: RawFd, pathname: PathBuf, at_flags: c_uint, name: CString, uargs: Arc<xattr_args> @ sized_by(raw_args.r#usize) } -> c_int
+    ~ [File, Desc] for [x86_64: 463, aarch64: 463, riscv64: 463],
   // sgetmask
   shmat(shmid: c_int, shmaddr: *const c_void, shmflg: c_int) / { shmid: c_int, shmaddr: AddressType, shmflg: c_int } -> AddressType
     ~ [IPC, Memory] for [x86_64: 30, aarch64: 196, riscv64: 196],
@@ -915,6 +929,7 @@ gen_syscalls! {
   unlinkat(dirfd: RawFd, pathname: *const c_char, flags: c_int) / { dirfd: RawFd, pathname: PathBuf, flags: c_int } -> c_int
     ~ [Desc, File] for [x86_64: 263, aarch64: 35, riscv64: 35],
   unshare(flags: c_int) / { flags: c_int } -> c_int ~ [] for [x86_64: 272, aarch64: 97, riscv64: 97],
+  uretprobe() / { } -> c_int ~ [] for [x86_64: 335],
   userfaultfd(flags: c_uint) / { flags: c_uint } -> RawFd ~ [Desc] for [x86_64: 323, aarch64: 282, riscv64: 282],
   ustat(dev: dev_t, ubuf: *mut ustat) / { dev: dev_t } -> c_int + { ubuf: ustat } ~ [] for [x86_64: 136],
   utime(filename: *const c_char, times: *const utimbuf) / { filename: PathBuf, times: Option<utimbuf> } -> c_int

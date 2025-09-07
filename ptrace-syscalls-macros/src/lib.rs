@@ -4,8 +4,8 @@ use proc_macro2::Span;
 use proc_macro_crate::{crate_name, FoundCrate};
 use quote::{format_ident, quote, quote_spanned, ToTokens};
 use syn::{
-  braced, bracketed, parenthesized, parse::Parse, parse_macro_input, punctuated::Punctuated,
-  spanned::Spanned, token, Expr, GenericArgument, Ident, PathArguments, Token, Type,
+  braced, bracketed, parenthesized, parse::Parse, parse_macro_input, punctuated::Punctuated, spanned::Spanned, token,
+  Expr, GenericArgument, Ident, PathArguments, Token, Type,
 };
 
 #[allow(dead_code)]
@@ -35,12 +35,7 @@ struct Decoder {
 }
 
 impl Decoder {
-  fn decoded(
-    &self,
-    arg_name: &Ident,
-    arg_type: proc_macro2::TokenStream,
-    span: Span,
-  ) -> proc_macro2::TokenStream {
+  fn decoded(&self, arg_name: &Ident, arg_type: proc_macro2::TokenStream, span: Span) -> proc_macro2::TokenStream {
     let mut counter = 0u32;
     let func: &Ident = &self.func;
     let (target_trait, is_result) = match func.to_string().as_str() {
@@ -316,10 +311,7 @@ fn gen_syscall_args_struct(
       quote_spanned! { span => (syscall_result as isize) < 0 },
     )
   } else {
-    (
-      quote_spanned! { span => let syscall_result = (); },
-      quote_spanned! { span => false },
-    )
+    (quote_spanned! { span => let syscall_result = (); }, quote_spanned! { span => false })
   };
   if let Some(modified_args) = &syscall.modified_args {
     for modified_arg in modified_args.args.iter() {
@@ -495,8 +487,7 @@ fn gen_syscall_args_struct(
 
 #[proc_macro]
 pub fn gen_syscalls(input: TokenStream) -> TokenStream {
-  let input =
-    parse_macro_input!(input with Punctuated::<SyscallEntry, syn::Token![,]>::parse_terminated);
+  let input = parse_macro_input!(input with Punctuated::<SyscallEntry, syn::Token![,]>::parse_terminated);
   let mut arg_structs = vec![];
   let mut raw_arg_structs = vec![];
   let mut modified_arg_structs = vec![];
@@ -718,8 +709,7 @@ pub fn gen_syscalls(input: TokenStream) -> TokenStream {
 }
 
 fn get_crate(name: &str) -> proc_macro2::TokenStream {
-  let found_crate =
-    crate_name(name).unwrap_or_else(|_| panic!("`{}` not found in `Cargo.toml`", name));
+  let found_crate = crate_name(name).unwrap_or_else(|_| panic!("`{}` not found in `Cargo.toml`", name));
 
   match found_crate {
     FoundCrate::Itself => quote!(crate),
@@ -735,10 +725,7 @@ fn wrap_syscall_arg_type(ty: &Type, span: Span) -> (proc_macro2::TokenStream, bo
   match ty {
     Type::Array(ty) => {
       let element_ty = &ty.elem;
-      (
-        quote_spanned!(span =>Result<#ty, InspectError<Vec<#element_ty>>>),
-        true,
-      )
+      (quote_spanned!(span =>Result<#ty, InspectError<Vec<#element_ty>>>), true)
     }
     Type::Path(ty) => {
       assert_eq!(ty.path.segments.len(), 1);
@@ -747,11 +734,10 @@ fn wrap_syscall_arg_type(ty: &Type, span: Span) -> (proc_macro2::TokenStream, bo
       match ty_str.as_str() {
         "Unit" => (quote_spanned!(span => ()), false),
         // Primitive types
-        "RawFd" | "socklen_t" | "c_int" | "c_uint" | "c_ulong" | "c_long" | "i16" | "i32"
-        | "i64" | "u64" | "usize" | "isize" | "size_t" | "key_serial_t" | "AddressType"
-        | "mode_t" | "uid_t" | "pid_t" | "gid_t" | "off_t" | "u32" | "clockid_t" | "id_t"
-        | "key_t" | "mqd_t" | "aio_context_t" | "dev_t" | "nfds_t" | "loff_t" | "qid_t"
-        | "idtype_t" | "time_t" | "timer_t" => (ty.to_token_stream(), false),
+        "RawFd" | "socklen_t" | "c_int" | "c_uint" | "c_ulong" | "c_long" | "i16" | "i32" | "i64" | "u64" | "usize"
+        | "isize" | "size_t" | "key_serial_t" | "AddressType" | "mode_t" | "uid_t" | "pid_t" | "gid_t" | "off_t"
+        | "u32" | "clockid_t" | "id_t" | "key_t" | "mqd_t" | "aio_context_t" | "dev_t" | "nfds_t" | "loff_t"
+        | "qid_t" | "idtype_t" | "time_t" | "timer_t" => (ty.to_token_stream(), false),
         // Types that need to be wrapped
         "sockaddr"
         | "CString"
@@ -807,13 +793,10 @@ fn wrap_syscall_arg_type(ty: &Type, span: Span) -> (proc_macro2::TokenStream, bo
             };
             let argstr = arg.args.to_token_stream().to_string();
             match argstr.as_str() {
-              "PathBuf" | "timespec" | "Vec < CString >" | "CString" | "Vec < c_ulong >"
-              | "Vec < c_uint >" | "Vec < gid_t >" | "timezone" | "mq_attr" | "siginfo_t"
-              | "sigset_t" | "iovec" | "rlimit64" | "fd_set" | "sockaddr" | "sigaction"
-              | "timeval" | "itimerval" | "stack_t" | "timer_t" | "time_t" | "sigevent"
-              | "itimerspec" | "utimbuf" | "rusage" => {
-                (quote_spanned!(span => InspectResult<#ty>), true)
-              }
+              "PathBuf" | "timespec" | "Vec < CString >" | "CString" | "Vec < c_ulong >" | "Vec < c_uint >"
+              | "Vec < gid_t >" | "timezone" | "mq_attr" | "siginfo_t" | "sigset_t" | "iovec" | "rlimit64"
+              | "fd_set" | "sockaddr" | "sigaction" | "timeval" | "itimerval" | "stack_t" | "timer_t" | "time_t"
+              | "sigevent" | "itimerspec" | "utimbuf" | "rusage" => (quote_spanned!(span => InspectResult<#ty>), true),
               "[timespec; 2]" | "[timeval; 2]" | "[timespec ; 2]" | "[timeval ; 2]" => {
                 let GenericArgument::Type(inner) = arg.args.first().unwrap() else {
                   panic!("Unsupported inner syscall arg type: {:?}", argstr);
@@ -822,10 +805,7 @@ fn wrap_syscall_arg_type(ty: &Type, span: Span) -> (proc_macro2::TokenStream, bo
                   panic!("Unsupported inner syscall arg type: {:?}", argstr)
                 };
                 let element_ty = &inner.elem;
-                (
-                  quote_spanned!(span => Result<#ty, InspectError<Vec<#element_ty>>>),
-                  true,
-                )
+                (quote_spanned!(span => Result<#ty, InspectError<Vec<#element_ty>>>), true)
               }
               _ => panic!("Unsupported inner syscall arg type: {:?}", argstr),
             }
@@ -835,10 +815,9 @@ fn wrap_syscall_arg_type(ty: &Type, span: Span) -> (proc_macro2::TokenStream, bo
             };
             let arg = arg.args.to_token_stream().to_string();
             match arg.as_str() {
-              "c_int" | "u8" | "CString" | "epoll_event" | "futex_waitv" | "c_ulong"
-              | "linux_dirent" | "io_event" | "linux_dirent64" | "gid_t" | "AddressType"
-              | "kexec_segment" | "c_uchar" | "u64" | "mount_attr" | "pollfd" | "iovec"
-              | "riscv_hwprobe" | "mmsghdr" | "sembuf" => {
+              "c_int" | "u8" | "CString" | "epoll_event" | "futex_waitv" | "c_ulong" | "linux_dirent" | "io_event"
+              | "linux_dirent64" | "gid_t" | "AddressType" | "kexec_segment" | "c_uchar" | "u64" | "mount_attr"
+              | "pollfd" | "iovec" | "riscv_hwprobe" | "mmsghdr" | "sembuf" => {
                 (quote_spanned!(span => InspectResult<#ty>), true)
               }
               _ => panic!("Unsupported inner syscall arg type: {:?}", arg),
@@ -851,7 +830,9 @@ fn wrap_syscall_arg_type(ty: &Type, span: Span) -> (proc_macro2::TokenStream, bo
             };
             let arg = arg.args.to_token_stream().to_string();
             match arg.as_str() {
-              "rseq" | "statmount" | "msgbuf" | "file_handle" => (quote_spanned!(span => InspectResult<#ty>), true),
+              "rseq" | "statmount" | "msgbuf" | "file_handle" | "xattr_args" | "mount_attr" => {
+                (quote_spanned!(span => InspectResult<#ty>), true)
+              }
               _ => panic!("Unsupported inner syscall arg type: {:?}", arg),
             }
           } else {
