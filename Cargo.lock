@@ -167,7 +167,7 @@ dependencies = [
 
 [[package]]
 name = "ptrace-syscalls"
-version = "0.0.0-experimental.2"
+version = "0.0.0-experimental.3"
 dependencies = [
  "cfg-if",
  "enumflags2",
@@ -182,7 +182,7 @@ dependencies = [
 
 [[package]]
 name = "ptrace-syscalls-macros"
-version = "0.0.0-experimental.2"
+version = "0.0.0-experimental.3"
 dependencies = [
  "convert_case",
  "itertools",
