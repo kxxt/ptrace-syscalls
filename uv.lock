@@ -1,0 +1,23 @@
+version = 1
+revision = 3
+requires-python = ">=3.13"
+
+[[package]]
+name = "ptrace-syscalls"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "system-calls" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "system-calls", specifier = ">=6.15.0" }]
+
+[[package]]
+name = "system-calls"
+version = "6.15.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/3b/77/5ba22931ab2b6f7f7bf0b0cc10474a2fa70b9b347787fda76f3b419e68a4/system_calls-6.15.0.tar.gz", hash = "sha256:03f04ca8ae0f5c5450610e783a1560e65b5ded3c5038773611b91a42907bf8fe", size = 55186, upload-time = "2025-06-23T13:48:43.528Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/43/e6/5fecfb4bdbd611cd92f46c5eba0e063b0c491103dac83a3076dd9aaab24f/system_calls-6.15.0-py3-none-any.whl", hash = "sha256:7e87e75c568b2f405807d429d87e4e4b18819b4cb3d8412d68caa0882bab49f0", size = 131148, upload-time = "2025-06-23T13:48:42.061Z" },
+]
